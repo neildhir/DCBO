@@ -1,12 +1,12 @@
-# Dynamic Causal Continuous and Categorical Bayesian Optimisation (DCoCaBO)
-
-## Notes
-
-- [disrete to discrete] Discrete variable transitions will happen through learned transition matrices (as used in HMMs) (if unknown, otherwise use the deterministic matrix)
-
-- [discrete to continuous] The discrete variable will index a particular domain of the continuous part
+# Dynamic Causal Bayesian Optimisation
 
 ## Major refactorings to do ('TODO')
+
+- Write tutorials
+
+- Check license
+
+- Write proper main README file
 
 - Parallelise sampling functions so that they are not sequential, that is far too slow
 
