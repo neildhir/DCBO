@@ -2,7 +2,7 @@ from collections import OrderedDict
 from typing import Callable, Iterable
 
 from numpy.random import randn
-from src.utilities import select_sample
+from ..utilities import select_sample
 
 
 def make_sem_hat(emission_fncs: dict, transition_fncs: dict) -> classmethod:
@@ -247,7 +247,7 @@ def auto_sem_dependent_stationary_hat(
     variables: Iterable, root_instrument: bool, emission_functions: dict, transition_functions: dict
 ) -> classmethod:
 
-    # TODO: this function will eventually be passed the full adjacency matrix for the graph.
+    # XXX: this function will eventually be passed the full adjacency matrix for the graph.
 
     class semhat:
         @staticmethod

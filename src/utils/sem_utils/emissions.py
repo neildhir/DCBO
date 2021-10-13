@@ -1,6 +1,6 @@
-from src.gaussian_process_utils import fit_gp
-from numpy.core import hstack
 from itertools import chain
+from numpy.core import hstack
+from ..gp_utils import fit_gp
 
 
 def fit_initial_emission_functions(
@@ -14,9 +14,7 @@ def fit_initial_emission_functions(
     for es in canonical_exploration_sets:
         if len(es) == 1:
             initial_emission_functions[es] = fit_gp(
-                x=observational_samples[es[0]][:, 0].reshape(-1, 1),
-                y=yy,
-                n_restart=n_restart,
+                x=observational_samples[es[0]][:, 0].reshape(-1, 1), y=yy, n_restart=n_restart,
             )
         else:
             xx = []
@@ -36,7 +34,7 @@ def fit_sem(observational_samples: dict, time_slice_children: dict, n_restart: i
     fncs = {t: {key: None for key in time_slice_children.keys()} for t in range(T)}
     for t in range(T):
         for key in fncs[t].keys():
-            # TODO: This is hard coded
+            # XXX: This is hard coded
             if key == "Z" and t > 0:
                 xx = observational_samples[key][:, t].reshape(-1, 1)
                 yy = observational_samples[time_slice_children[key]][:, t].reshape(-1, 1)

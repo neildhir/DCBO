@@ -1,9 +1,8 @@
 from typing import Tuple, Union
-
+import numpy as np
 import scipy.stats
 from emukit.core.acquisition import Acquisition
 from emukit.core.interfaces import IDifferentiable, IModel
-import numpy as np
 
 
 class ManualCausalExpectedImprovement(Acquisition):

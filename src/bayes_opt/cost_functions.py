@@ -1,8 +1,6 @@
 from collections import OrderedDict
-
 import numpy as np
 from emukit.core.acquisition import Acquisition
-from numpy import zeros
 
 
 class COST(Acquisition):
@@ -27,23 +25,23 @@ class COST(Acquisition):
         return True
 
     def evaluate_with_gradients(self, x):
-        return self.evaluate(x), zeros(x.shape)
+        return self.evaluate(x), np.zeros(x.shape)
 
 
 ## Define a cost variable for each intervention
-def cost_fix_equal(intervention_value, **kwargs):
+def cost_fix_equal():
     fix_cost = 1.0
     return fix_cost
 
 
 ## Define a cost variable for each intervention
-def cost_fix_different(intervention_value, **kwargs):
+def cost_fix_different():
     fix_cost = int(np.random.randint(1, 10, 1))
     return fix_cost
 
 
 ## Define a cost variable for each intervention
-def cost_fix_equal_variable(intervention_value, **kwargs):
+def cost_fix_equal_variable(intervention_value):
     fix_cost = 1.0
     return np.sum(np.abs(intervention_value)) + fix_cost
 

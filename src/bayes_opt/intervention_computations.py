@@ -1,22 +1,18 @@
 from typing import Tuple
 
+import numpy as np
 from emukit.core.parameter_space import ParameterSpace
 from numpy import argmax, argmin, ndarray
-import numpy as np
-
-from src.bayes_opt.causal_acquisition_functions import (
-    CausalExpectedImprovement,
-    ManualCausalExpectedImprovement,
-)
+from src.bayes_opt.causal_acquisition_functions import CausalExpectedImprovement, ManualCausalExpectedImprovement
 from src.bayes_opt.cost_functions import COST
-from src.utils.utilities import make_column_shape_2D
 from src.utils.sequential_intervention_functions import create_n_dimensional_intervention_grid
+from src.utils.utilities import make_column_shape_2D
 
 
 def numerical_optimization(acquisition, inputs: ndarray, task: str, exploration_set,) -> ndarray:
 
     # Finds the new best point by evaluating the function in a set of given inputs
-    N, D = inputs.shape
+    _, D = inputs.shape
 
     improvements = acquisition.evaluate(inputs)
 
@@ -36,7 +32,7 @@ def numerical_optimization(acquisition, inputs: ndarray, task: str, exploration_
     else:
         raise ValueError("The new point is not an array. Or something else fishy is going on.")
 
-    # TODO Might not be needed
+    # TODO: consider removing
     if x_new.shape[0] == D:
         # The function make_column_shape_2D might convert a (D, ) array in a (D,1) array that needs to be reshaped
         x_new = np.transpose(x_new)

@@ -4,14 +4,10 @@ import scipy
 
 
 def calculate_convex_hull_ratio(graph, observations_variables, N_max=None) -> float:
-
     """
-    MAKE SURE THIS WORKS FOR HIGHER DIMENSIONS.
-
-    XXX: currently not sure what to do if we intervene on variables with different dimensionality
-    e.g. univariate and multivariate intervention mixing.
-
-    XXX: does this work when we update the number of observations taken?
+    Open questions:
+    1. Currently unclear what to do if we intervene on variables with different dimensionality e.g. univariate and multivariate intervention mixing.
+    2. Does this work when we update the number of observations taken?
 
     usage:
 
@@ -22,7 +18,7 @@ def calculate_convex_hull_ratio(graph, observations_variables, N_max=None) -> fl
     # List of variables that have been observed to some degree
     if len(observations_variables) >= 2:
         assert isinstance(observations_variables, tuple) or isinstance(observations_variables, list)
-        # TODO: this is not necessarily a strict criterion, but only for the toy example
+        # This is not necessarily a strict criterion, but only for the toy example
         assert all(x.shape == observations_variables[0].shape for x in observations_variables)
 
     # From specified graph get the internventional ranges
@@ -32,7 +28,6 @@ def calculate_convex_hull_ratio(graph, observations_variables, N_max=None) -> fl
         points = np.array(list(itertools.product(*interventional_ranges)))
     else:
         # Cartesian product for multivariate manipulative variables
-        # TODO: ensure that interventional ranges are passed as a list of tuples of tuples
         points = np.array([sum(i, ()) for i in list(itertools.product(*interventional_ranges))])
 
     # Calculate coverage of the observations

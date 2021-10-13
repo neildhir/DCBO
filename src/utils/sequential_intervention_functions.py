@@ -1,15 +1,7 @@
 from copy import deepcopy
-
 import numpy as np
-
-from src.intervention_assignments import (
-    assign_initial_intervention_level,
-    assign_intervention_level,
-)
-from src.sequential_causal_functions import (
-    powerset,
-    sequential_sample_from_model,
-)
+from .intervention_assignments import assign_initial_intervention_level, assign_intervention_level
+from .sequential_causal_functions import powerset, sequential_sample_from_model
 
 
 def create_n_dimensional_intervention_grid(limits: list, size_intervention_grid: int = 100):
@@ -62,37 +54,12 @@ def get_interventional_grids(exploration_set, intervention_limits, size_interven
     return intervention_grid
 
 
-def temporal_causation_verification(es, target_var_index):
-    # Intervention only happening on _one_ variable
-    if len(es) == 1:
-        # Notice that we are splitting by the underscore and this is a hard-coded feature
-        iv_var, iv_var_index = es[0].split("_")
-        # Check temporal causation
-        assert int(iv_var_index) <= int(target_var_index), (
-            int(iv_var_index),
-            int(target_var_index),
-        )
-
-    # Intervention happening on _multiple_ variables
-    else:
-        for iv in es:
-            # Notice that we are splitting by the underscore and this is a hard-coded feature
-            iv_var, iv_var_index = iv.split("_")
-            # Check temporal causation
-            assert int(iv_var_index) <= int(target_var_index)
-
-
 def reproduce_empty_intervention_blanket(T, keys):
     return {key: T * [None] for key in keys}
 
 
 def evaluate_target_function(
-    initial_structural_equation_model,
-    structural_equation_model,
-    graph,
-    exploration_set: tuple,
-    all_vars,
-    T: int,
+    initial_structural_equation_model, structural_equation_model, graph, exploration_set: tuple, all_vars, T: int,
 ):
     # Initialise temporal intervention dictionary
     intervention_blanket, total_timesteps = make_sequential_intervention_dictionary(graph)

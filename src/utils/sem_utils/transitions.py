@@ -1,4 +1,4 @@
-from src.gaussian_process_utils import fit_gp
+from ..gp_utils import fit_gp
 from numpy import newaxis
 from numpy.core import concatenate, hstack
 
@@ -19,9 +19,7 @@ def fit_sem_transition_functions(observational_samples, n_restart=10) -> dict:
 
         # Store funcs in dict for later usage
         transition_functions[var] = fit_gp(
-            x=concatenate(xx, axis=0)[:, newaxis],
-            y=concatenate(yy, axis=0)[:, newaxis],
-            n_restart=n_restart,
+            x=concatenate(xx, axis=0)[:, newaxis], y=concatenate(yy, axis=0)[:, newaxis], n_restart=n_restart,
         )
 
     return transition_functions
@@ -38,17 +36,13 @@ def update_transition_function(transition_functions, new_observational_samples, 
             yy.append(new_observational_samples[var][:, t2])
 
         # Re-fit the GP without creating a new object
-        # TODO: do checks here to see that the input-space dimensionality is consistent with the past function
         transition_functions[var].set_XY(
-            X=concatenate(xx, axis=0)[:, newaxis],
-            Y=concatenate(yy, axis=0)[:, newaxis],
+            X=concatenate(xx, axis=0)[:, newaxis], Y=concatenate(yy, axis=0)[:, newaxis],
         )
         transition_functions[var].optimise()
 
 
 def fit_sem_transition_functions_complex(observational_samples, transfer_pairs: dict) -> dict:
-
-    # TODO: provide option to use _all_ horizontal information to fit transitions (for stationary regime)
 
     # Store function which concern t-1 --> t
     transition_functions = {}

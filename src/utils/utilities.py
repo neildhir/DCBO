@@ -1,17 +1,14 @@
-import copy
+import datetime
+from copy import deepcopy
 from typing import Tuple
 import matplotlib.pyplot as plt
-
 import numpy as np
-from emukit.core import ContinuousParameter, ParameterSpace
-from numpy import cumsum, vstack, array, meshgrid
-from src.sequential_causal_functions import sequential_sample_from_model
-from numpy.core import hstack
-
-from copy import deepcopy
 import seaborn as sns
-import datetime
-from pandas import read_csv, DataFrame
+from emukit.core import ContinuousParameter, ParameterSpace
+from numpy import array, cumsum, meshgrid, vstack
+from numpy.core import hstack
+from pandas import DataFrame, read_csv
+from .sequential_causal_functions import sequential_sample_from_model
 
 
 def make_surface_plot(
@@ -27,14 +24,12 @@ def make_surface_plot(
     X, Y = meshgrid(interventional_grids[(variables[0],)], interventional_grids[(variables[1],)])
     CE = array(causal_effects)
     Z = CE.reshape(X.shape)
-    surf = ax.plot_surface(X, Y, Z, rstride=5, cstride=1, alpha=0.85, cmap="viridis", edgecolor="none")
+    ax.plot_surface(X, Y, Z, rstride=5, cstride=1, alpha=0.85, cmap="viridis", edgecolor="none")
 
     ax.set_xlim(interventional_variable_limits[variables[0]][0], interventional_variable_limits[variables[0]][1])
     ax.set_ylim(
-        interventional_variable_limits[variables[1]][0],
-        interventional_variable_limits[variables[1]][1],
+        interventional_variable_limits[variables[1]][0], interventional_variable_limits[variables[1]][1],
     )
-    # ax.set_zlim(-10, 1)
 
     ax.set_xlabel(r"$X$", labelpad=10)
     ax.set_ylabel(r"$Z$", labelpad=10)
@@ -44,7 +39,7 @@ def make_surface_plot(
         # Set reference time for save
         now = datetime.datetime.now()
         fig.savefig(
-            "../figures/synthetic/intervene_XZ_" + filename + "_" + now.strftime("%Y-%m-%d-%H:%M") + ".pdf",
+            "../../../figures/synthetic/intervene_XZ_" + filename + "_" + now.strftime("%Y-%m-%d-%H:%M") + ".pdf",
             bbox_inches="tight",
         )
 
@@ -72,12 +67,7 @@ def zero_variance_adjustment(x):
 
 
 def check_reshape_add_data(
-    interventional_data_x,
-    interventional_data_y,
-    new_interventional_data_x,
-    y_new,
-    best_es,
-    temporal_index,
+    interventional_data_x, interventional_data_y, new_interventional_data_x, y_new, best_es, temporal_index,
 ):
     if (
         interventional_data_x[temporal_index][best_es] is not None
@@ -91,10 +81,7 @@ def check_reshape_add_data(
         )
         # Update interventional data Y
         interventional_data_y[temporal_index][best_es] = vstack(
-            (
-                interventional_data_y[temporal_index][best_es],
-                make_column_shape_2D(y_new),
-            )
+            (interventional_data_y[temporal_index][best_es], make_column_shape_2D(y_new),)
         )
     else:
         # Assign new interventional data
@@ -194,10 +181,7 @@ def get_monte_carlo_expectation(intervention_samples):
     return new
 
 
-def create_intervention_exploration_domain(
-    exploration_sets,
-    interventional_variable_limits,
-) -> dict:
+def create_intervention_exploration_domain(exploration_sets, interventional_variable_limits,) -> dict:
     intervention_exploration_domain = {es: None for es in exploration_sets}
     for es in exploration_sets:
         if len(es) == 1:
@@ -216,11 +200,7 @@ def create_intervention_exploration_domain(
     return intervention_exploration_domain
 
 
-def make_parameter_space_for_intervention_set(
-    exploration_set: tuple,
-    lower_limit,
-    upper_limit,
-) -> ParameterSpace:
+def make_parameter_space_for_intervention_set(exploration_set: tuple, lower_limit, upper_limit,) -> ParameterSpace:
     assert isinstance(exploration_set, tuple)
     if len(exploration_set) == 1:
         assert isinstance(lower_limit, float)
@@ -258,9 +238,9 @@ def initialise_DCBO_parameters_and_objects_at_start_only(
     assert isinstance(interventional_data, dict)
     assert sorted(canonical_exploration_sets) == list(sorted(interventional_data.keys()))
     target_values = {es: None for es in canonical_exploration_sets}
-    interventions = copy.deepcopy(target_values)
-    intervention_data_X = copy.deepcopy(target_values)
-    intervention_data_Y = copy.deepcopy(target_values)
+    interventions = deepcopy(target_values)
+    intervention_data_X = deepcopy(target_values)
+    intervention_data_Y = deepcopy(target_values)
 
     for es in canonical_exploration_sets:
 
@@ -292,17 +272,12 @@ def initialise_DCBO_parameters_and_objects_at_start_only(
         target_values[es] = data_subset[base_target][target_coordinates, 0]
         # Find the corresponding interventions [array]
         interventions[es] = get_corresponding_interventions(
-            es,
-            target_coordinates,
-            data_subset,
-            base_target,
-            only_initial_time_step=True,
+            es, target_coordinates, data_subset, base_target, only_initial_time_step=True,
         )
         # Set the interventional data for use in DCBO
-        (
-            intervention_data_X[es],
-            intervention_data_Y[es],
-        ) = make_intervention_data_for_DCBO(es, interventions[es], target_values[es])
+        (intervention_data_X[es], intervention_data_Y[es],) = make_intervention_data_for_DCBO(
+            es, interventions[es], target_values[es]
+        )
 
     # Best exploration set
     best_es = eval(task)(target_values, key=target_values.get)
@@ -339,10 +314,10 @@ def initialise_DCBO_parameters_and_objects_filtering(
 
     assert isinstance(interventional_data, dict)
     target_values = {t: {es: None for es in exploration_sets} for t in range(total_timesteps)}
-    interventions = copy.deepcopy(target_values)
+    interventions = deepcopy(target_values)
 
-    intervention_data_X = copy.deepcopy(target_values)
-    intervention_data_Y = copy.deepcopy(target_values)
+    intervention_data_X = deepcopy(target_values)
+    intervention_data_Y = deepcopy(target_values)
     temporal_index = 0
     for es in exploration_sets:
 
@@ -433,15 +408,15 @@ def initialise_DCBO_parameters_and_objects_full_graph_smoothing(
 
     assert isinstance(interventional_data, dict)
     target_values = {es: None for es in canonical_exploration_sets}
-    interventions = copy.deepcopy(target_values)
+    interventions = deepcopy(target_values)
 
     if autoregressive:
         canonical_exploration_sets_VAR = [i + (base_target.lower() + "_{t-1}",) for i in canonical_exploration_sets]
         intervention_data_X = {es: None for es in (canonical_exploration_sets + canonical_exploration_sets_VAR)}
-        intervention_data_Y = copy.deepcopy(intervention_data_X)
+        intervention_data_Y = deepcopy(intervention_data_X)
     else:
-        intervention_data_X = copy.deepcopy(target_values)
-        intervention_data_Y = copy.deepcopy(target_values)
+        intervention_data_X = deepcopy(target_values)
+        intervention_data_Y = deepcopy(target_values)
 
     # TODO: investigate the issues w.r.t. the temporal dimension being ignored on instantiation,
     #  when we are considering a smoothing problem.
@@ -497,10 +472,9 @@ def initialise_DCBO_parameters_and_objects_full_graph_smoothing(
             interventions[es] = get_corresponding_interventions(es, target_coordinates, data_subset, base_target)
             assert interventions[es] is not None
             # Set the interventional data for use in DCBO
-            (
-                intervention_data_X[es],
-                intervention_data_Y[es],
-            ) = make_intervention_data_for_DCBO(es, interventions[es], target_values[es])
+            (intervention_data_X[es], intervention_data_Y[es],) = make_intervention_data_for_DCBO(
+                es, interventions[es], target_values[es]
+            )
             assert intervention_data_X[es] is not None
             assert intervention_data_Y[es] is not None
 
@@ -662,15 +636,9 @@ def initialise_global_target_dict(exploration_set, task, max_T: int) -> dict:
 
 def find_global_optima_at_current_time(best_y_hitherto, task, time_index):
     if task == "min":
-        return min(
-            [(i, min(j[time_index])) for i, j in best_y_hitherto.items()],
-            key=lambda k: k[1],
-        )
+        return min([(i, min(j[time_index])) for i, j in best_y_hitherto.items()], key=lambda k: k[1],)
     else:
-        return max(
-            [(i, max(j[time_index])) for i, j in best_y_hitherto.items()],
-            key=lambda k: k[1],
-        )
+        return max([(i, max(j[time_index])) for i, j in best_y_hitherto.items()], key=lambda k: k[1],)
 
 
 def make_column_shape_2D(x):
@@ -686,11 +654,7 @@ def get_valid_children_in_time_slice(graph, exploration_set, time_slice_index, t
 
 
 def assign_blanket_hat(
-    blanket_hat: dict,
-    exploration_set,
-    intervention_level,
-    target,
-    target_value,
+    blanket_hat: dict, exploration_set, intervention_level, target, target_value,
 ):
 
     # Split current target
@@ -840,11 +804,7 @@ def calculate_best_intervention_and_effect(
                 fig, ax = plt.subplots(1, 1, figsize=(10, 5))
                 fig.suptitle("True causal effect at $t={}$".format(time))
                 ax.plot(
-                    interventional_grids[es],
-                    true_causal_effect[es],
-                    lw=2,
-                    alpha=0.5,
-                    label="$do{}$".format(es),
+                    interventional_grids[es], true_causal_effect[es], lw=2, alpha=0.5, label="$do{}$".format(es),
                 )
                 plt.legend()
             # elif len(es) == 2:

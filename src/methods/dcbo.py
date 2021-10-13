@@ -1,12 +1,4 @@
-# -*- coding: utf-8 -*-
-# =============================================
-# Title:  Dynamic Causal Bayesian Optimisation
-# File:   DCoCaBO.py
-# Date:   17 June 2021
-# =============================================
-
 from typing import Callable
-
 import numpy as np
 from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
 from GPy.core import Mapping
@@ -102,7 +94,6 @@ class DCBO(BaseClassDCBO):
             assert self.ground_truth is not None, "Provide ground truth to plot"
 
         # Walk through the graph, from left to right, i.e. the temporal dimension
-        # TODO: replace with counter with tdqm
         for temporal_index in trange(self.total_timesteps, desc="Time index"):
 
             if self.debug_mode:
