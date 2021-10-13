@@ -1,20 +1,20 @@
 from copy import deepcopy
-from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
-import numpy as np
 from itertools import combinations
-from src.utils.utilities import convert_to_dict_of_temporal_lists, make_column_shape_2D, update_emission_pairs_keys
-from .root import Root
+
+import numpy as np
+from src.utils.gp_utils import fit_gp, sequential_sample_from_complex_model_hat
 from src.utils.sem_utils.emissions import fit_sem_complex
 from src.utils.sem_utils.transitions import fit_sem_transition_functions_complex
-from src.utils.gp_utils import fit_gp, sequential_sample_from_complex_model_hat
 from src.utils.sequential_causal_functions import sequentially_sample_model
+from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
+from src.utils.utilities import convert_to_dict_of_temporal_lists, make_column_shape_2D, update_emission_pairs_keys
 
-# TODO: we probably want a separate base class for DCBO and CBO as they share so many methods.
+from .root import Root
 
 
 class BaseClassDCBO(Root):
     """
-    Base class for the DCBO system.
+    Base class for the DCBO method.
     """
 
     def __init__(

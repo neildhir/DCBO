@@ -1,15 +1,14 @@
 from copy import deepcopy
 from random import choice
-from typing import Callable
 
-import numpy as np
-from src.cost_functions import define_costs
-from src.sequential_intervention_functions import (
+from networkx.classes.multidigraph import MultiDiGraph
+from src.bayes_opt.cost_functions import define_costs
+from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
     make_sequential_intervention_dictionary,
 )
-from src.utilities import (
+from src.utils.utilities import (
     convert_to_dict_of_temporal_lists,
     create_intervention_exploration_domain,
     initialise_DCBO_parameters_and_objects_filtering,
@@ -18,7 +17,6 @@ from src.utilities import (
     standard_mean_function,
     zero_variance_adjustment,
 )
-from networkx.classes.multidigraph import MultiDiGraph
 
 
 class BaseClassABO:
@@ -88,10 +86,7 @@ class BaseClassABO:
         # Canonical manipulative variables
         if manipulative_variables is None:
             self.manipulative_variables = list(
-                filter(
-                    lambda k: self.base_target_variable not in k,
-                    self.observational_samples.keys(),
-                )
+                filter(lambda k: self.base_target_variable not in k, self.observational_samples.keys(),)
             )
         else:
             self.manipulative_variables = manipulative_variables
@@ -190,8 +185,7 @@ class BaseClassABO:
 
         # Parameter space for optimisation
         self.intervention_exploration_domain = create_intervention_exploration_domain(
-            self.exploration_sets,
-            intervention_domain,
+            self.exploration_sets, intervention_domain,
         )
 
         #  Optimisation specific parameters to initialise

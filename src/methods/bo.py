@@ -2,31 +2,19 @@
 Main BO class.
 """
 from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
+from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
-from numpy import nan, squeeze, random
+from numpy import nan, random, squeeze
 from numpy.core.multiarray import ndarray
-from tqdm import trange
-
-from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bases.bo_base import BaseClassBO
-
+from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.utilities import (
-    assign_blanket,
-    check_blanket,
-    check_reshape_add_data,
-    make_column_shape_2D,
-)
-from GPy.core.parameterization import priors
+from src.utils.utilities import assign_blanket, check_blanket, check_reshape_add_data, make_column_shape_2D
+from tqdm import trange
 
 
 class BO(BaseClassBO):
-    """
-    BO           : causal_prior == False, dynamic == False
-
-    """
-
     def __init__(
         self,
         graph: str,

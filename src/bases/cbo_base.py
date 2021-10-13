@@ -2,16 +2,16 @@ from copy import deepcopy
 from itertools import combinations
 from random import choice
 from typing import Callable
-from itertools import combinations
 
-from src.cost_functions import define_costs
-from src.emissions import fit_sem_complex
-from src.sequential_intervention_functions import (
+from networkx.classes.multidigraph import MultiDiGraph
+from src.bayes_opt.cost_functions import define_costs
+from src.utils.sem_utils.emissions import fit_sem_complex
+from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
     make_sequential_intervention_dictionary,
 )
-from src.utilities import (
+from src.utils.utilities import (
     convert_to_dict_of_temporal_lists,
     create_intervention_exploration_domain,
     initialise_DCBO_parameters_and_objects_filtering,
@@ -19,14 +19,11 @@ from src.utilities import (
     initialise_optimal_intervention_level_list,
     update_emission_pairs_keys,
 )
-from networkx.classes.multidigraph import MultiDiGraph
 
 
 class BaseClassCBO:
     """
     Base class for the CBO system.
-
-    Presently CBO cannot account for confounding variables and it is only implemented with causal prior.
     """
 
     def __init__(
@@ -141,20 +138,14 @@ class BaseClassCBO:
         self.index_name = 0
 
         # Instantiate blanket that will form final solution
-        (
-            self.optimal_blanket,
-            self.total_timesteps,
-        ) = make_sequential_intervention_dictionary(self.graph)
+        (self.optimal_blanket, self.total_timesteps,) = make_sequential_intervention_dictionary(self.graph)
         self.assigned_blanket = deepcopy(self.optimal_blanket)
         self.empty_intervention_blanket, _ = make_sequential_intervention_dictionary(self.graph)
 
         # Canonical manipulative variables
         if manipulative_variables is None:
             self.manipulative_variables = list(
-                filter(
-                    lambda k: self.base_target_variable not in k,
-                    self.observational_samples.keys(),
-                )
+                filter(lambda k: self.base_target_variable not in k, self.observational_samples.keys(),)
             )
         else:
             self.manipulative_variables = manipulative_variables
@@ -244,18 +235,12 @@ class BaseClassCBO:
         for temporal_index in range(T):
             for es in self.exploration_sets:
                 self.target_functions[temporal_index][es] = evaluate_target_function(
-                    self.true_initial_sem,
-                    self.true_sem,
-                    self.graph,
-                    es,
-                    self.observational_samples.keys(),
-                    T,
+                    self.true_initial_sem, self.true_sem, self.graph, es, self.observational_samples.keys(), T,
                 )
 
         # Parameter space for optimisation
         self.intervention_exploration_domain = create_intervention_exploration_domain(
-            self.exploration_sets,
-            intervention_domain,
+            self.exploration_sets, intervention_domain,
         )
 
         # Optimisation specific parameters to initialise

@@ -2,25 +2,21 @@
 Main CBO class.
 """
 from typing import Callable
+
 import matplotlib.pyplot as plt
 import numpy as np
 from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
 from GPy.core import Mapping
-from GPy.models import GPRegression
+from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF
+from GPy.models import GPRegression
 from numpy import nan, squeeze
 from numpy.core.multiarray import ndarray
-from tqdm import trange
-
-from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bases.cbo_base import BaseClassCBO
 from src.bayes_opt.causal_kernels import CausalRBF
-from src.utils.gp_utils import (
-    fit_gp,
-    update_sufficient_statistics,
-    update_sufficient_statistics_hat,
-)
+from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
+from src.utils.gp_utils import fit_gp, update_sufficient_statistics, update_sufficient_statistics_hat
 from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.utilities import (
     assign_blanket,
@@ -31,7 +27,7 @@ from src.utils.utilities import (
     standard_mean_function,
     zero_variance_adjustment,
 )
-from GPy.core.parameterization import priors
+from tqdm import trange
 
 
 class CBO(BaseClassCBO):

@@ -2,33 +2,20 @@
 Main ABO class.
 """
 from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
+from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
-from numpy import arange, asarray, hstack, nan, repeat, squeeze, random
+from numpy import arange, asarray, hstack, nan, random, repeat, squeeze
 from numpy.core import vstack
 from numpy.core.multiarray import ndarray
+from src.bases.abo_base import BaseClassABO
+from src.bayes_opt.cost_functions import total_intervention_cost
+from src.bayes_opt.intervention_computations import evaluate_acquisition_function
+from src.utils.utilities import assign_blanket, check_blanket, check_reshape_add_data, make_column_shape_2D
 from tqdm import trange
-
-from src.cost_functions import total_intervention_cost
-from src.abo_base import BaseClassABO
-from src.intervention_computations import evaluate_acquisition_function
-from src.utilities import (
-    assign_blanket,
-    check_blanket,
-    check_reshape_add_data,
-    make_column_shape_2D,
-)
-from GPy.core.parameterization import priors
 
 
 class ABO(BaseClassABO):
-    """
-    Optimisation options:
-
-    ABO          : causal_prior == False, dynamic == True
-
-    """
-
     def __init__(
         self,
         graph: str,
@@ -129,9 +116,7 @@ class ABO(BaseClassABO):
                 # Evaluate cost of intervention
                 self.per_trial_cost[temporal_index].append(
                     total_intervention_cost(
-                        best_es,
-                        self.cost_functions,
-                        self.interventional_data_x[temporal_index][best_es],
+                        best_es, self.cost_functions, self.interventional_data_x[temporal_index][best_es],
                     )
                 )
 
@@ -165,8 +150,7 @@ class ABO(BaseClassABO):
             for es in self.exploration_sets:
 
                 if isinstance(
-                    self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx],
-                    ndarray,
+                    self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx], ndarray,
                 ):
                     # Check to see that the optimal intervention is not None
                     check_val = self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx]
@@ -207,10 +191,7 @@ class ABO(BaseClassABO):
                 node_children=None,
             )
             check_blanket(
-                self.assigned_blanket,
-                self.base_target_variable,
-                temporal_index,
-                self.manipulative_variables,
+                self.assigned_blanket, self.base_target_variable, temporal_index, self.manipulative_variables,
             )
 
             # Check optimization results for the current temporal index before moving on
@@ -332,11 +313,7 @@ class ABO(BaseClassABO):
             self.per_trial_cost[temporal_index].append(self.per_trial_cost[temporal_index][-1])
 
     def _update_bo_model(
-        self,
-        temporal_index: int,
-        exploration_set: tuple,
-        alpha: float = 2,
-        beta: float = 0.5,
+        self, temporal_index: int, exploration_set: tuple, alpha: float = 2, beta: float = 0.5,
     ) -> None:
 
         assert self.interventional_data_x[temporal_index][exploration_set] is not None
@@ -361,12 +338,7 @@ class ABO(BaseClassABO):
 
             input_dim = input_dim + 1
 
-            model = GPRegression(
-                X=x,
-                Y=y,
-                kernel=RBF(input_dim, lengthscale=1.0, variance=1.0),
-                noise_var=1e-5,
-            )
+            model = GPRegression(X=x, Y=y, kernel=RBF(input_dim, lengthscale=1.0, variance=1.0), noise_var=1e-5,)
 
             # Store model
             model.likelihood.variance.fix()
@@ -385,8 +357,7 @@ class ABO(BaseClassABO):
         else:
             # Model exists so we simply update it
             self.bo_model[temporal_index][exploration_set].set_data(
-                X=x,
-                Y=y,
+                X=x, Y=y,
             )
             old_seed = random.get_state()
 

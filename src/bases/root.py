@@ -1,11 +1,18 @@
 from copy import deepcopy
 from random import choice
 from typing import Callable
-from matplotlib import pyplot as plt
-import numpy as np
 
+import numpy as np
+from matplotlib import pyplot as plt
+from networkx.classes.multidigraph import MultiDiGraph
+from numpy.core.multiarray import ndarray
 from numpy.core.numeric import nan
 from src.bayes_opt.cost_functions import define_costs
+from src.utils.sequential_intervention_functions import (
+    evaluate_target_function,
+    get_interventional_grids,
+    make_sequential_intervention_dictionary,
+)
 from src.utils.utilities import (
     check_reshape_add_data,
     convert_to_dict_of_temporal_lists,
@@ -15,14 +22,6 @@ from src.utils.utilities import (
     initialise_optimal_intervention_level_list,
     make_column_shape_2D,
 )
-
-from networkx.classes.multidigraph import MultiDiGraph
-from src.utils.sequential_intervention_functions import (
-    evaluate_target_function,
-    get_interventional_grids,
-    make_sequential_intervention_dictionary,
-)
-from numpy.core.multiarray import ndarray
 
 
 class Root:
