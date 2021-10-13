@@ -89,11 +89,7 @@ def sequential_sample_from_model(
 
 
 def sequential_sample_from_model_hat(
-    initial_sem,
-    dynamic_sem,
-    timesteps: int,
-    initial_values: dict = None,
-    interventions: dict = None,
+    initial_sem, dynamic_sem, timesteps: int, initial_values: dict = None, interventions: dict = None,
 ):
     """
     Function to sequentially sample a dynamic Bayesian network using ESTIMATED SEMs.
@@ -228,6 +224,8 @@ def sequential_sample_from_complex_model_hat(
                             emit_vars = (*[v for v in node_parents[node] if v.split("_")[1] == time],)
                             if emit_vars:
                                 sample[var][temporal_index] = function(temporal_index, emit_vars, sample)
+                            elif not emit_vars:
+                                sample[var][temporal_index] = function()
                             else:
                                 raise ValueError("There are no parents!", emit_vars)
                     else:
@@ -320,8 +318,6 @@ def sequentially_sample_model(
         new_samples[var] = np.vstack(new_samples[var])
 
     return new_samples
-
-
 
 
 def extract_data_streams_from_multivariate_time_series(variables, data, new_samples=False):

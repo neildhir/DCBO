@@ -573,16 +573,18 @@ def plot_outcome(T, N, outcomes: list, labels: list, true_objective_values: list
     assert isinstance(labels, list)
     assert len(outcomes) == len(labels)
 
-    for i in range(T):
+    for t in range(T):
         for ii, out in enumerate(outcomes):
-            ax[i].plot(out[i][1:], lw=2, label=labels[ii])
+            ax[t].plot(out[t][1:], lw=2, label=labels[ii],alpha=0.5)
         if true_objective_values:
-            ax[i].hlines(true_objective_values[i], 0, 40, "k", ls="--", lw=3, alpha=0.2, label="Ground truth")
-        ax[i].set_ylabel(r"$y^*_{}$".format(i))
-        ax[i].grid(True)
-        if i == 0:
-            ax[i].legend(ncol=4, fontsize="large", loc="center", frameon=False, bbox_to_anchor=(0.5, 1.15))
+            ax[t].hlines(true_objective_values[t], 0, N, "red", ls="--", lw=1, alpha=0.7, label="Ground truth")
+        ax[t].set_ylabel(r"$y^*_{}$".format(t))
+        ax[t].grid(True)
+        if t == 0:
+            ax[t].legend(ncol=3, fontsize="medium", loc="center", frameon=False, bbox_to_anchor=(0.5, 1.2))
+
     ax[2].set_xlabel(r"Trials")
+    ax[2].set_xlim(0, N - 2)
 
     plt.subplots_adjust(hspace=0)
     plt.show()

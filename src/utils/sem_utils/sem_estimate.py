@@ -278,18 +278,12 @@ def auto_sem_dependent_stationary_hat(
         def static(self, moment: int):
             assert moment in [0, 1], moment
             functions = OrderedDict()
+            # Assume variables are causally ordered
             for i, var in enumerate(variables):
                 if i == 0:
-                    if root_instrument:
-                        """
-                        Noise as root node in time-slice, without any time dependence
-                        """
-                        functions[var] = self._make_some_white_noise_function()
-                    else:
-                        """
-                        Root node as instrument variable.
-                        """
-                        functions[var] = self._make_static_function(moment)
+                    # This is how CBO 'views' the graph.
+                    # Always sample from the exogenous model at the root node
+                    functions[var] = self._make_some_white_noise_function()
                 else:
                     functions[var] = self._make_static_function(moment)
             return functions
@@ -307,6 +301,8 @@ def auto_sem_dependent_stationary_hat(
                             |
                             V
                             o Child node at time t
+
+                        This is how CBO 'views' the graph.
                         """
                         functions[var] = self._make_some_white_noise_function()
                     else:

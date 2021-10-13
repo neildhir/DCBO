@@ -9,18 +9,18 @@ from networkx.drawing import nx_agraph
 import numpy as np
 from tqdm import trange
 
-from dcbo import DCBO
-from cbo import CBO
-from abo import ABO
-from bo import BO
+from ..methods.dcbo import DCBO
+from ..methods.cbo import CBO
+from ..methods.abo import ABO
+from ..methods.bo import BO
 
-from src.sequential_causal_functions import powerset, sequentially_sample_model
-from src.sequential_intervention_functions import (
+from ..utils.sequential_causal_functions import sequentially_sample_model
+from ..utils.sequential_intervention_functions import (
     get_interventional_grids,
     make_sequential_intervention_dictionary,
 )
-from src.utilities import get_monte_carlo_expectation
-from src.gaussian_process_utils import fit_causal_gp
+from ..utils.utilities import get_monte_carlo_expectation, powerset
+from ..utils.gp_utils import fit_causal_gp
 
 
 def run_methods_replicates(
@@ -570,15 +570,7 @@ def optimal_sequence_of_interventions(
     best_s_values = []
     best_objective_values = []
 
-    optimal_interventions, _ = make_sequential_intervention_dictionary(graph)
-
-    # for level, j in zip(optimal_interventions.keys(), exploration_sets):
-    #     print("level ", level)
-    #     print("j ", j)
-    #     optimal_interventions[j] = optimal_interventions[level]
-    #     print("optimal_interventions", optimal_interventions)
-    #     del optimal_interventions[level]
-
+    # optimal_interventions, _ = make_sequential_intervention_dictionary(graph)
     optimal_interventions = {setx: [None] * timesteps for setx in exploration_sets}
 
     y_stars = deepcopy(optimal_interventions)
@@ -593,7 +585,6 @@ def optimal_sequence_of_interventions(
         if t == 0:
 
             for s in exploration_sets:
-                print("s", s)
 
                 # Reset blanket so as to not carry over levels from previous exploration set
                 intervention_blanket = deepcopy(blank_intervention_blanket)
@@ -654,9 +645,6 @@ def optimal_sequence_of_interventions(
                     out = get_monte_carlo_expectation(intervention_samples)
 
                     CE[s].append((out[target_variable][t]))
-
-        print("t == {}".format(t))
-        print("\n")
 
         local_target_values = []
         for s in exploration_sets:
