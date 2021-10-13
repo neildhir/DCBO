@@ -8,8 +8,8 @@ from numpy import nan, squeeze, random
 from numpy.core.multiarray import ndarray
 from tqdm import trange
 
-from src.cost_functions import total_intervention_cost
-from src.bo_base import BaseClassBO
+from src.bayes_opt.cost_functions import total_intervention_cost
+from src.bases.bo_base import BaseClassBO
 
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
 from src.utils.utilities import (
