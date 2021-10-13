@@ -271,7 +271,7 @@ def auto_sem_dependent_stationary_hat(
 
         @staticmethod
         def _make_dynamic_transfer_only_function(moment: int) -> Callable:
-            return lambda t, transfer_input_vars, sample: transition_functions[transfer_input_vars].predict(
+            return lambda t, transfer_input_vars, _, sample: transition_functions[transfer_input_vars].predict(
                 select_sample(sample, transfer_input_vars, t - 1)
             )[moment]
 

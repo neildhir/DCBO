@@ -23,7 +23,7 @@ class BO(BaseClassBO):
         intervention_domain: dict,
         interventional_samples: dict,
         number_of_trials: int,
-        base_target_variable: str = "Y",
+        base_target_variable: str,
         task: str = "min",
         cost_type: int = 1,
         n_restart: int = 1,

@@ -47,7 +47,7 @@ def fit_sem_transition_functions_complex(observational_samples, transfer_pairs: 
     # Store function which concern t-1 --> t
     transition_functions = {}
 
-    for input_vars in transfer_pairs.keys():
+    for input_vars in transfer_pairs:
         # Transfer input
         if len(input_vars) > 1:
             # many to one mapping
@@ -59,15 +59,13 @@ def fit_sem_transition_functions_complex(observational_samples, transfer_pairs: 
                 xx.append(observational_samples[in_var][:, in_time].reshape(-1, 1))
             xx = hstack(xx)
         else:
-            in_var = input_vars[0].split("_")[0]
-            in_time = int(input_vars[0].split("_")[1])
-            xx = observational_samples[in_var][:, in_time].reshape(-1, 1)
+            in_var, in_time = input_vars[0].split("_")
+            xx = observational_samples[in_var][:, int(in_time)].reshape(-1, 1)
 
         # Transfer target
         output = transfer_pairs[input_vars]
-        out_var = output.split("_")[0]
-        out_time = int(output.split("_")[1])
-        yy = observational_samples[out_var][:, out_time].reshape(-1, 1)
+        out_var, out_time = output.split("_")
+        yy = observational_samples[out_var][:, int(out_time)].reshape(-1, 1)
         # Store funcs in dict for later usage
         transition_functions[input_vars] = fit_gp(x=xx, y=yy)
 

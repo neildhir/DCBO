@@ -42,7 +42,7 @@ class BaseClassDCBO(Root):
         change_points: list = None,
         root_instrument: bool = None,
     ):
-        super(BaseClassDCBO, self).__init__(
+        super().__init__(
             graph,
             sem,
             make_sem_hat,
@@ -50,6 +50,7 @@ class BaseClassDCBO(Root):
             intervention_domain,
             interventional_samples,
             exploration_sets,
+            estimate_sem,
             base_target_variable,
             task,
             cost_type,
@@ -123,8 +124,6 @@ class BaseClassDCBO(Root):
         # Sometimes the input and output pair order does not match because of NetworkX internal issues,
         # so we need adjust the keys so that they do match.
         self.emission_pairs = update_emission_pairs_keys(self.T, self.node_parents, self.emission_pairs)
-        # Estimates of structural equation models [spatial models]
-        self.estimate_sem = estimate_sem
         self.sem_trans_fncs = fit_sem_transition_functions_complex(self.observational_samples, self.transfer_pairs)
         self.sem_emit_fncs = fit_sem_complex(self.observational_samples, self.emission_pairs)
 
@@ -134,6 +133,11 @@ class BaseClassDCBO(Root):
                 tt = int(self.transfer_pairs[key].split("_")[1])
                 if t == tt:
                     self.time_indexed_trans_fncs_inputs[t].append(key)
+
+        # Convert observational samples to dict of temporal lists.
+        # We do this because at each time-index we may have a different number of samples.
+        # Because of this, samples need to be stored one lists per time-step.
+        self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
 
     def _update_sem_emit_fncs(self, temporal_index: int, temporal_index_data=None) -> None:
 

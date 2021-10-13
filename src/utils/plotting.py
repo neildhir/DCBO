@@ -567,7 +567,7 @@ def plot_expected_opt_curve_paper(
 
 def plot_outcome(T, N, outcomes: list, labels: list, true_objective_values: list = None) -> None:
 
-    _, ax = plt.subplots(T, figsize=(6, 4), sharex=True)
+    _, ax = plt.subplots(T, figsize=(6, 6), sharex=True)
 
     assert isinstance(outcomes, list)
     assert isinstance(labels, list)

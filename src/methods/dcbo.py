@@ -50,7 +50,7 @@ class DCBO(BaseClassDCBO):
         change_points: list = None,
         root_instrument: bool = None,
     ):
-        super(DCBO).__init__(
+        super().__init__(
             graph,
             sem,
             make_sem_hat,
@@ -86,7 +86,6 @@ class DCBO(BaseClassDCBO):
         self.seed = seed
         self.sample_anchor_points = sample_anchor_points
         self.seed_anchor_points = seed_anchor_points
-        self.name = "DCoCaBO"
 
     def run_optimization(self):
 

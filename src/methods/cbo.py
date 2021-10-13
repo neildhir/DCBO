@@ -41,7 +41,7 @@ class CBO(BaseClassCBO):
         interventional_samples: dict,
         exploration_sets: dict,
         number_of_trials: int,
-        base_target_variable: str = "Y",
+        base_target_variable: str,
         ground_truth: list = None,
         estimate_sem: bool = True,
         task: str = "min",

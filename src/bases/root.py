@@ -15,7 +15,6 @@ from src.utils.sequential_intervention_functions import (
 )
 from src.utils.utilities import (
     check_reshape_add_data,
-    convert_to_dict_of_temporal_lists,
     create_intervention_exploration_domain,
     initialise_DCBO_parameters_and_objects_filtering,
     initialise_global_outcome_dict_new,
@@ -38,6 +37,7 @@ class Root:
         intervention_domain: dict,
         interventional_samples: dict = None,  # interventional data collected for specific intervention sets
         exploration_sets: list = None,
+        estimate_sem: bool = False,
         base_target_variable: str = "Y",
         task: str = "min",
         cost_type: int = 1,  # There are multiple options here
@@ -72,7 +72,6 @@ class Root:
 
         # Total time-steps and sample count per time-step
         _, self.T = observational_samples[list(observational_samples.keys())[0]].shape
-        # Make sure data has been normalised/centred
         self.observational_samples = observational_samples
 
         # Check that we are either minimising or maximising the objective function
@@ -207,13 +206,11 @@ class Root:
         self.per_trial_cost = [[] for _ in range(self.total_timesteps)]
         self.optimal_intervention_sets = [None for _ in range(self.total_timesteps)]
 
-        # Convert observational samples to dict of temporal lists.
-        # We do this because at each time-index we may have a different number of samples.
-        # Because of this, samples need to be stored one lists per time-step.
-        self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
         # Acquisition function specifics
         self.y_acquired = {es: None for es in self.exploration_sets}
         self.corresponding_x = deepcopy(self.y_acquired)
+        # Estimates of structural equation models [spatial models]
+        self.estimate_sem = estimate_sem
         if self.estimate_sem:
             self.assigned_blanket_hat = deepcopy(self.optimal_blanket)
 
