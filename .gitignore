@@ -1,6 +1,6 @@
 .DS_Store
 
-# Data folder 
+# Data folder
 data/
 
 # PyCharm stuff
@@ -12,7 +12,6 @@ data/
 # Ignore data folder so we don't push the data to the repo
 data/
 results/
-figures/
 *.ipynb_checkpoints
 *.vscode
 
