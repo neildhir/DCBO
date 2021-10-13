@@ -1,6 +1,6 @@
 from networkx.drawing import nx_agraph
 import pygraphviz
-from src.utils.sem_utils.structural_equation_models import StationaryDependentSEM
+from src.utils.sem_utils.toy_sems import StationaryDependentSEM
 from src.utils.dag_utils.graph_functions import make_graphical_model
 
 

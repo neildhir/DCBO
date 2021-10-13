@@ -1,5 +1,4 @@
 from collections import OrderedDict
-from itertools import chain, combinations
 
 import numpy as np
 from numpy.random import randn
@@ -323,10 +322,6 @@ def sequentially_sample_model(
     return new_samples
 
 
-def powerset(iterable):
-    # this returns e.g. powerset([1,2,3]) --> (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
-    s = list(iterable)
-    return chain.from_iterable(combinations(s, r) for r in range(1, len(s) + 1))
 
 
 def extract_data_streams_from_multivariate_time_series(variables, data, new_samples=False):

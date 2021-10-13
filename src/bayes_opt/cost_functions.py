@@ -29,13 +29,15 @@ class COST(Acquisition):
 
 
 ## Define a cost variable for each intervention
-def cost_fix_equal():
+def cost_fix_equal(intervention_value):
+    # The argument for this function is a dummy variable.
     fix_cost = 1.0
     return fix_cost
 
 
 ## Define a cost variable for each intervention
-def cost_fix_different():
+def cost_fix_different(intervention_value):
+    # The argument for this function is a dummy variable.
     fix_cost = int(np.random.randint(1, 10, 1))
     return fix_cost
 

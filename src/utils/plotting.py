@@ -563,3 +563,26 @@ def plot_expected_opt_curve_paper(
             bbox_extra_artists=(lgd,),
             bbox_inches="tight",
         )
+
+
+def plot_outcome(T, N, outcomes: list, labels: list, true_objective_values: list = None) -> None:
+
+    _, ax = plt.subplots(T, figsize=(6, 4), sharex=True)
+
+    assert isinstance(outcomes, list)
+    assert isinstance(labels, list)
+    assert len(outcomes) == len(labels)
+
+    for i in range(T):
+        for ii, out in enumerate(outcomes):
+            ax[i].plot(out[i][1:], lw=2, label=labels[ii])
+        if true_objective_values:
+            ax[i].hlines(true_objective_values[i], 0, 40, "k", ls="--", lw=3, alpha=0.2, label="Ground truth")
+        ax[i].set_ylabel(r"$y^*_{}$".format(i))
+        ax[i].grid(True)
+        if i == 0:
+            ax[i].legend(ncol=4, fontsize="large", loc="center", frameon=False, bbox_to_anchor=(0.5, 1.15))
+    ax[2].set_xlabel(r"Trials")
+
+    plt.subplots_adjust(hspace=0)
+    plt.show()

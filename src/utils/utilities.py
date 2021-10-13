@@ -1,5 +1,6 @@
 import datetime
 from copy import deepcopy
+from itertools import chain, combinations
 from typing import Tuple
 import matplotlib.pyplot as plt
 import numpy as np
@@ -950,3 +951,9 @@ def update_emission_pairs_keys(T: int, node_parents: dict, emission_pairs: dict)
                         raise ValueError("This key is erroneous.", parents, tuple(reversed(parents)))
 
     return emission_pairs
+
+
+def powerset(iterable):
+    # this returns e.g. powerset([1,2,3]) --> (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
+    s = list(iterable)
+    return chain.from_iterable(combinations(s, r) for r in range(1, len(s) + 1))

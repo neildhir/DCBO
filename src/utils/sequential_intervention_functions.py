@@ -1,7 +1,8 @@
 from copy import deepcopy
 import numpy as np
 from .intervention_assignments import assign_initial_intervention_level, assign_intervention_level
-from .sequential_causal_functions import powerset, sequential_sample_from_model
+from .sequential_causal_functions import sequential_sample_from_model
+from .utilities import powerset
 
 
 def create_n_dimensional_intervention_grid(limits: list, size_intervention_grid: int = 100):
