@@ -1,16 +1,11 @@
-from itertools import chain
-
-import numpy as np
-from GPy.kern import RBF
-from GPy.core.mapping import Mapping
-from GPy.models.gp_regression import GPRegression
-from src.sequential_causal_functions import (
-    sequential_sample_from_model,
-    sequential_sample_from_complex_model_hat,
-)
 from copy import deepcopy
-from src.causal_kernels import CausalRBF
+import numpy as np
+from GPy.core.mapping import Mapping
 from GPy.core.parameterization import priors
+from GPy.kern import RBF
+from GPy.models.gp_regression import GPRegression
+from ..bayes_opt.causal_kernels import CausalRBF
+from .sequential_causal_functions import sequential_sample_from_complex_model_hat, sequential_sample_from_model
 
 
 def update_sufficient_statistics_hat(
@@ -176,7 +171,7 @@ def fit_gp(
     return model
 
 
-def fit_causal_gp(mean_function, variance_function, X, Y, n_restart=10):
+def fit_causal_gp(mean_function, variance_function, X, Y):
     input_dim = X.shape[1]
     # Specify mean function
     mf = Mapping(input_dim, 1)

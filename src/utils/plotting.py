@@ -1,73 +1,11 @@
-from numpy import hstack, newaxis, array
-import numpy as np
-from pandas import DataFrame
-from seaborn import jointplot, set_style, set_context
-import matplotlib.pyplot as plt
 import datetime
-from numpy import linspace, meshgrid, sqrt
-from src.sequential_causal_functions import sequentially_sample_model
-from src.utilities import get_cumulative_cost_mean_and_std, get_mean_and_std
+import matplotlib.pyplot as plt
+import numpy as np
 import seaborn as sns
-
-
-# def elaborate(number_of_interventions, n_replicates, n_trials, data, best_objective_values, T):
-#     # Replace initial data point
-#     if number_of_interventions is None:
-#         for model in data.keys():
-#             for r in range(n_replicates):
-#                 for t in range(T):
-#                     if data[model][r][1][t][0] == 10000000.0:
-#                         data[model][r][1][t][0] = data[model][r][1][t][1]
-
-#     # Aggregate data
-#     per_trial_cost = {model: [] for model in data.keys()}
-#     optimal_outcome_values_during_trials = {model: [] for model in data.keys()}
-
-#     for i in range(n_replicates):
-#         for model in data.keys():
-#             per_trial_cost[model].append(data[model][i][0])
-#             optimal_outcome_values_during_trials[model].append(data[model][i][1])
-
-#     # Aggregate data
-#     exp_per_trial_cost = get_cumulative_cost_mean_and_std(per_trial_cost, T, repeats=n_replicates)
-#     exp_optimal_outcome_values_during_trials = get_mean_and_std(
-#         optimal_outcome_values_during_trials, T, repeats=n_replicates
-#     )
-
-#     # For ABO and BO we make the cost start from 0 as in the competing models
-#     # We then augement the dimension of the y values to plot to ensure they can be plotted
-#     if "BO" in exp_per_trial_cost.keys() and "ABO" in exp_per_trial_cost.keys():
-#         initial_value_BO_ABO = np.max(
-#             (
-#                 exp_optimal_outcome_values_during_trials["BO"][0][0][0],
-#                 exp_optimal_outcome_values_during_trials["ABO"][0][0][0],
-#             )
-#         )
-
-#     for model in exp_per_trial_cost.keys():
-#         if model == "BO" or model == "ABO":
-#             costs = exp_per_trial_cost[model]
-#             values = exp_optimal_outcome_values_during_trials[model]
-#             for t in range(T):
-#                 values_t = values[t]
-#                 exp_per_trial_cost[model][t] = np.asarray([0] + list(costs[t]))
-
-#                 exp_optimal_outcome_values_during_trials[model][t] = tuple(
-#                     [np.asarray([values_t[i][0]] + list(values_t[i])) for i in range(2)]
-#                 )
-
-#     # # Clip values so they are not lower than the min
-#     # for model in exp_per_trial_cost.keys():
-#     #     for t in range(T):
-#     #         clipped = np.clip(
-#     #             exp_optimal_outcome_values_during_trials[model][t][0], a_min=best_objective_values[t], a_max=0
-#     #         )
-#     #         exp_optimal_outcome_values_during_trials[model][t] = (
-#     #             clipped,
-#     #             exp_optimal_outcome_values_during_trials[model][t][1],
-#     #         )
-
-#     return exp_optimal_outcome_values_during_trials, exp_per_trial_cost
+from numpy import array, hstack, linspace, meshgrid, newaxis, sqrt
+from pandas import DataFrame
+from seaborn import jointplot, set_context, set_style
+from .sequential_causal_functions import sequentially_sample_model
 
 
 def select_data(samples, variables, time_indices):
@@ -127,13 +65,7 @@ def plot_target_intervention_response(intervention_domain, mean_causal_effect, t
 
         # PLOT
         ax.plot_surface(
-            iv_range_1,
-            iv_range_2,
-            Y_for_plot,
-            cmap="viridis",
-            edgecolor="none",
-            linewidth=0,
-            antialiased=False,
+            iv_range_1, iv_range_2, Y_for_plot, cmap="viridis", edgecolor="none", linewidth=0, antialiased=False,
         )
 
         # Axes titles
@@ -154,11 +86,7 @@ def plot_target_intervention_response(intervention_domain, mean_causal_effect, t
 
 
 def make_contour_surface_plot(
-    interventional_grids,
-    causal_effects,
-    interventional_variable_limits,
-    optimal_int_level=None,
-    filename=None,
+    interventional_grids, causal_effects, optimal_int_level=None, filename=None,
 ):
     sns.set_context("paper", font_scale=1.7)
 
@@ -174,34 +102,12 @@ def make_contour_surface_plot(
 
     # Surface
     ax.plot_surface(
-        X,
-        Y,
-        Z,
-        rstride=3,
-        cstride=3,
-        alpha=0.4,
-        cmap="autumn_r",
-        antialiased=False,
-        linewidth=0,
-        zorder=1,
+        X, Y, Z, rstride=3, cstride=3, alpha=0.4, cmap="autumn_r", antialiased=False, linewidth=0, zorder=1,
     )
     # Contour
     ax.contour(
-        X,
-        Y,
-        Z,
-        10,
-        zdir="z",
-        cmap="autumn_r",
-        linestyles="solid",
-        offset=ce_floor,
-        zorder=2,
+        X, Y, Z, 10, zdir="z", cmap="autumn_r", linestyles="solid", offset=ce_floor, zorder=2,
     )
-    # ax.contour(X, Y, Z, 20, colors="k", linestyles="solid")
-    # ax.set_xlim(interventional_variable_limits["X"][0], interventional_variable_limits["X"][1])
-    # ax.set_ylim(
-    #     interventional_variable_limits["Z"][0], interventional_variable_limits["Z"][1],
-    # )
     ax.set_zlim(ce_floor, ce_ceil)
 
     ax.set_xlabel(r"$X$", labelpad=10)
@@ -251,13 +157,7 @@ def opt_results_outcome_per_temporal_index(time_index, ground_truth, bo, cbo, sb
     ax = fig.add_subplot(111)
 
     ax.hlines(
-        y=ground_truth,
-        xmin=0,
-        xmax=nr_trials,
-        linewidth=2,
-        color="k",
-        ls="--",
-        label="Ground truth",
+        y=ground_truth, xmin=0, xmax=nr_trials, linewidth=2, color="k", ls="--", label="Ground truth",
     )
     ax.set_xlim(0, nr_trials)
     labels = ["BO", "CBO", "SCIBO w.o. CP", "SCIBO"]
@@ -307,11 +207,7 @@ def plot_opt_curve(time_index, ground_truth, cost, outcome, filename=None):
     assert len(outcome) == len(cost)
 
     sns.set_theme(
-        context="paper",
-        style="ticks",
-        palette="deep",
-        font="sans-serif",
-        font_scale=1.3,
+        context="paper", style="ticks", palette="deep", font="sans-serif", font_scale=1.3,
     )
     sns.set_style({"xtick.direction": "in", "ytick.direction": "in"})
 
@@ -324,13 +220,7 @@ def plot_opt_curve(time_index, ground_truth, cost, outcome, filename=None):
 
     # Ground truth
     ax.hlines(
-        y=ground_truth,
-        xmin=0,
-        xmax=round(max(cs)),
-        linewidth=2,
-        color="red",
-        ls="-",
-        label="Ground truth",
+        y=ground_truth, xmin=0, xmax=round(max(cs)), linewidth=2, color="red", ls="-", label="Ground truth",
     )
 
     a = np.array(outcome)
@@ -348,8 +238,7 @@ def plot_opt_curve(time_index, ground_truth, cost, outcome, filename=None):
     if filename:
         # Set reference time for save
         fig.savefig(
-            "../figures/synthetic/main_opt_curves_" + filename + ".pdf",
-            bbox_inches="tight",
+            "../figures/synthetic/main_opt_curves_" + filename + ".pdf", bbox_inches="tight",
         )
 
     plt.show()
@@ -358,18 +247,12 @@ def plot_opt_curve(time_index, ground_truth, cost, outcome, filename=None):
 def plot_expected_opt_curve(time_index, ground_truth, cost, outcome, plot_params, filename=None):
 
     sns.set_theme(
-        context="paper",
-        style="ticks",
-        palette="deep",
-        font="sans-serif",
-        font_scale=1.3,
+        context="paper", style="ticks", palette="deep", font="sans-serif", font_scale=1.3,
     )
     sns.set_style({"xtick.direction": "in", "ytick.direction": "in"})
 
     assert cost.keys() == outcome.keys()
 
-    width = 5
-    # fig = plt.figure(figsize=(width, width / 1.61803398875))
     fig = plt.figure(figsize=(7, 3))
     ax = fig.add_subplot(111)
 
@@ -402,11 +285,7 @@ def plot_expected_opt_curve(time_index, ground_truth, cost, outcome, plot_params
         upper = outcome[model][time_index][0] + outcome[model][time_index][1]
 
         ax.fill_between(
-            cs,
-            lower,
-            upper,
-            alpha=plot_params["alpha"],
-            color=plot_params["colors"][model],
+            cs, lower, upper, alpha=plot_params["alpha"], color=plot_params["colors"][model],
         )
 
     # Ground truth
@@ -440,21 +319,16 @@ def plot_expected_opt_curve(time_index, ground_truth, cost, outcome, plot_params
     ax.set_xlim(0, plot_params["xlim_max"])
     if isinstance(ground_truth, dict):
         ax.set_ylim(
-            ground_truth["DCBO"] - 0.2,
-            np.max(outcome[model][time_index][0] + outcome[model][time_index][1] + 2.0),
+            ground_truth["DCBO"] - 0.2, np.max(outcome[model][time_index][0] + outcome[model][time_index][1] + 2.0),
         )
     else:
         ax.set_ylim(
-            ground_truth - 0.2,
-            np.max(outcome[model][time_index][0] + outcome[model][time_index][1] + 1.0),
+            ground_truth - 0.2, np.max(outcome[model][time_index][0] + outcome[model][time_index][1] + 1.0),
         )
     # Outcome value
     ax.set_ylabel("$y_{}^\star$".format(time_index), fontsize=plot_params["size_labels"])
     ax.legend(
-        ncol=plot_params["ncols"],
-        loc=plot_params["loc_legend"],
-        fontsize="large",
-        frameon=True,
+        ncol=plot_params["ncols"], loc=plot_params["loc_legend"], fontsize="large", frameon=True,
     )
 
     if filename:
@@ -482,11 +356,7 @@ def plot_average_curve(
 ):
 
     sns.set_theme(
-        context="paper",
-        style="ticks",
-        palette="deep",
-        font="sans-serif",
-        font_scale=1.3,
+        context="paper", style="ticks", palette="deep", font="sans-serif", font_scale=1.3,
     )
     sns.set_style({"xtick.direction": "in", "ytick.direction": "in"})
 
@@ -522,11 +392,7 @@ def plot_average_curve(
         upper = mean_values + std_values
 
         plt.fill_between(
-            cs,
-            lower,
-            upper,
-            alpha=plot_params["alpha"],
-            color=plot_params["colors"][model],
+            cs, lower, upper, alpha=plot_params["alpha"], color=plot_params["colors"][model],
         )
 
     # Ground truth
@@ -546,14 +412,10 @@ def plot_average_curve(
     plt.xlim(0, plot_params["xlim_max"])
     # plt.xlim(0, 2)
     plt.ylim(
-        np.mean([ground_truth[i] for i in range(T)]) - 0.1,
-        np.max(mean_values + std_values),
+        np.mean([ground_truth[i] for i in range(T)]) - 0.1, np.max(mean_values + std_values),
     )
     plt.legend(
-        ncol=plot_params["ncols"],
-        loc=plot_params["loc_legend"],
-        fontsize="large",
-        frameon=True,
+        ncol=plot_params["ncols"], loc=plot_params["loc_legend"], fontsize="large", frameon=True,
     )
     plt.title(
         online_option + ", " + n_obs + ", " + n_replicates + " OptionCBO:" + optionCBO + " OptionDCBO:" + optionDCBO,
@@ -581,11 +443,7 @@ def plot_expected_opt_curve_paper(
 ):
 
     sns.set_theme(
-        context="paper",
-        style="ticks",
-        palette="deep",
-        font="sans-serif",
-        font_scale=1.3,
+        context="paper", style="ticks", palette="deep", font="sans-serif", font_scale=1.3,
     )
     sns.set_style({"xtick.direction": "in", "ytick.direction": "in"})
 
@@ -670,8 +528,7 @@ def plot_expected_opt_curve_paper(
             )
         else:
             axs[time_index].set_ylim(
-                ground_truth[time_index] - 0.2,
-                ground_truth[time_index] + 3,
+                ground_truth[time_index] - 0.2, ground_truth[time_index] + 3,
             )
 
         # Annotate (1, 3)
