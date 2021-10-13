@@ -12,17 +12,17 @@ from numpy import nan, squeeze
 from numpy.core.multiarray import ndarray
 from tqdm import trange
 
-from src.causal_kernels import CausalRBF
-from src.cost_functions import total_intervention_cost
-from src.cbo_base import BaseClassCBO
-from src.gaussian_process_utils import (
+from src.bayes_opt.cost_functions import total_intervention_cost
+from src.bases.cbo_base import BaseClassCBO
+from src.bayes_opt.causal_kernels import CausalRBF
+from src.utils.gp_utils import (
     fit_gp,
     update_sufficient_statistics,
     update_sufficient_statistics_hat,
 )
-from src.intervention_computations import evaluate_acquisition_function
-from src.sequential_causal_functions import sequentially_sample_model
-from src.utilities import (
+from src.bayes_opt.intervention_computations import evaluate_acquisition_function
+from src.utils.sequential_causal_functions import sequentially_sample_model
+from src.utils.utilities import (
     assign_blanket,
     check_blanket,
     check_reshape_add_data,
@@ -35,12 +35,6 @@ from GPy.core.parameterization import priors
 
 
 class CBO(BaseClassCBO):
-    """
-
-    CBO          : causal_prior == True and dynamic == False
-
-    """
-
     def __init__(
         self,
         graph: str,
@@ -219,9 +213,7 @@ class CBO(BaseClassCBO):
                     # Evaluate cost of intervention
                     self.per_trial_cost[temporal_index].append(
                         total_intervention_cost(
-                            best_es,
-                            self.cost_functions,
-                            self.interventional_data_x[temporal_index][best_es],
+                            best_es, self.cost_functions, self.interventional_data_x[temporal_index][best_es],
                         )
                     )
 
@@ -251,9 +243,7 @@ class CBO(BaseClassCBO):
 
                     if self.debug_mode:
                         print(
-                            "### Optimized model: ###",
-                            best_es,
-                            self.bo_model[temporal_index][best_es].model,
+                            "### Optimized model: ###", best_es, self.bo_model[temporal_index][best_es].model,
                         )
 
             # Post optimisation assignments (post this time-index that is)
@@ -266,8 +256,7 @@ class CBO(BaseClassCBO):
             for es in self.exploration_sets:
 
                 if isinstance(
-                    self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx],
-                    ndarray,
+                    self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx], ndarray,
                 ):
                     # Check to see that the optimal intervention is not None
                     check_val = self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx]
@@ -309,10 +298,7 @@ class CBO(BaseClassCBO):
                 node_children=self.node_children,
             )
             check_blanket(
-                self.assigned_blanket,
-                self.base_target_variable,
-                temporal_index,
-                self.manipulative_variables,
+                self.assigned_blanket, self.base_target_variable, temporal_index, self.manipulative_variables,
             )
 
             # Check optimization results for the current temporal index before moving on
@@ -420,8 +406,7 @@ class CBO(BaseClassCBO):
             plt.show()
 
     def _plot_surrogate_model(
-        self,
-        temporal_index,
+        self, temporal_index,
     ):
         # Plot model
         for es in self.exploration_sets:
@@ -448,16 +433,12 @@ class CBO(BaseClassCBO):
                     and self.interventional_data_y[temporal_index][es] is not None
                 ):
                     plt.scatter(
-                        self.interventional_data_x[temporal_index][es],
-                        self.interventional_data_y[temporal_index][es],
+                        self.interventional_data_x[temporal_index][es], self.interventional_data_y[temporal_index][es],
                     )
 
                 plt.fill_between(inputs[:, 0], (mean - var)[:, 0], (mean + var)[:, 0], alpha=0.2)
                 plt.plot(
-                    inputs,
-                    mean,
-                    "b",
-                    label="$do{}$ at $t={}$".format(es, temporal_index),
+                    inputs, mean, "b", label="$do{}$ at $t={}$".format(es, temporal_index),
                 )
                 plt.plot(inputs, true, "r", label="True at $t={}$".format(temporal_index))
                 plt.legend()
@@ -641,11 +622,7 @@ class CBO(BaseClassCBO):
                 )
 
     def _update_bo_model(
-        self,
-        temporal_index: int,
-        exploration_set: tuple,
-        alpha: float = 2,
-        beta: float = 0.5,
+        self, temporal_index: int, exploration_set: tuple, alpha: float = 2, beta: float = 0.5,
     ) -> None:
 
         assert self.interventional_data_x[temporal_index][exploration_set] is not None
