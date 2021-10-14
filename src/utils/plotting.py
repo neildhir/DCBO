@@ -575,7 +575,7 @@ def plot_outcome(T, N, outcomes: list, labels: list, true_objective_values: list
 
     for t in range(T):
         for ii, out in enumerate(outcomes):
-            ax[t].plot(out[t][1:], lw=2, label=labels[ii],alpha=0.5)
+            ax[t].plot(out[t][1:], lw=2, label=labels[ii], alpha=0.5)
         if true_objective_values:
             ax[t].hlines(true_objective_values[t], 0, N, "red", ls="--", lw=1, alpha=0.7, label="Ground truth")
         ax[t].set_ylabel(r"$y^*_{}$".format(t))
@@ -588,3 +588,92 @@ def plot_outcome(T, N, outcomes: list, labels: list, true_objective_values: list
 
     plt.subplots_adjust(hspace=0)
     plt.show()
+
+
+def plot_optimisation_outcomes(
+    ax,
+    i,
+    interventional_grids,
+    mean_function,
+    time_index,
+    exploration_set,
+    true_causal_effects,
+    vmin,
+    vmax,
+    X_I_train,
+    Y_I_train,
+    observational_samples,
+    time_slice_batch_indices,
+    objective_values,
+    n,
+):
+    #  Mean function
+    ax[i].plot(
+        interventional_grids[exploration_set],
+        mean_function,
+        lw=2,
+        color="b",
+        ls="--",
+        label=r"$m_{{{}_{}}}$".format(exploration_set[0], time_index),
+    )
+    # True causal effect at time_index
+    ax[i].plot(
+        interventional_grids[exploration_set],
+        np.array(true_causal_effects[time_index][exploration_set]),
+        lw=4,
+        color="r",
+        alpha=0.5,
+        label="Target CE",
+    )
+    # Confidence interval
+    ax[i].fill_between(
+        interventional_grids[exploration_set].squeeze(),
+        vmin.squeeze(),
+        vmax.squeeze(),
+        color="b",
+        alpha=0.25,
+        label="95\% CI",
+    )
+    # Interventions
+    ax[i].scatter(
+        X_I_train,
+        Y_I_train,
+        s=200,
+        marker=".",
+        c="g",
+        label=r"$\mathcal{{D}}^I_{}, |\mathcal{{D}}^I_{}| = {}$".format(time_index, time_index, n),
+        linewidths=2,
+        zorder=10,
+    )
+    # Observations
+    ax[i].scatter(
+        observational_samples[exploration_set[0]][time_slice_batch_indices[time_index], time_index],
+        1.5
+        * objective_values[exploration_set][time_index]
+        * np.ones_like(observational_samples[exploration_set[0]][time_slice_batch_indices[time_index], time_index]),
+        s=100,
+        marker="x",
+        c="k",
+        label=r"$\mathcal{{D}}^O_{}, |\mathcal{{D}}^O_{}| = {}$".format(
+            time_index,
+            time_index,
+            len(observational_samples[exploration_set[0]][time_slice_batch_indices[time_index], time_index]),
+        ),
+        alpha=0.5,
+        linewidths=1,
+    )
+    ax[i].set_xlabel("${}_{}$".format(exploration_set[0], time_index))
+    if time_index == 0:
+        ax[i].set_ylabel(
+            r"$\mathbb{{E}}[{}_{} \mid \textrm{{do}}({}_{})]$".format("Y", time_index, exploration_set[0], time_index)
+        )
+    else:
+        es_star, _ = max(objective_values.items(), key=lambda x: x[time_index - 1])
+        ax[i].set_ylabel(
+            r"$\mathbb{{E}}[{}_{} \mid \textrm{{do}}({}_{}),\textrm{{did}}({}_{}) ]$".format(
+                "Y", time_index, exploration_set[0], time_index, es_star[0], time_index - 1,
+            )
+        )
+    ax[i].legend(
+        ncol=1, fontsize="medium", loc="lower center", frameon=False, bbox_to_anchor=(1.2, 0.4),
+    )

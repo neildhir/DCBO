@@ -1,11 +1,8 @@
 import pickle
 from copy import deepcopy
-from pathlib import Path
 from random import sample
 
-import pygraphviz
 from matplotlib import pyplot as plt
-from networkx.drawing import nx_agraph
 import numpy as np
 from tqdm import trange
 
@@ -15,12 +12,10 @@ from ..methods.abo import ABO
 from ..methods.bo import BO
 
 from ..utils.sequential_causal_functions import sequentially_sample_model
-from ..utils.sequential_intervention_functions import (
-    get_interventional_grids,
-    make_sequential_intervention_dictionary,
-)
-from ..utils.utilities import get_monte_carlo_expectation, powerset
+from ..utils.sequential_intervention_functions import make_sequential_intervention_dictionary
+from ..utils.utilities import get_monte_carlo_expectation
 from ..utils.gp_utils import fit_causal_gp
+from ..utils.plotting import plot_optimisation_outcomes
 
 
 def run_methods_replicates(
@@ -31,9 +26,9 @@ def run_methods_replicates(
     intervention_domain,
     methods_list,
     obs_samples,
-    ground_truth,
     exploration_sets,
     base_target_variable,
+    ground_truth=None,
     total_timesteps=3,
     reps=3,
     number_of_trials=3,
@@ -52,7 +47,7 @@ def run_methods_replicates(
     transfer_hp_i=False,
     hp_i_prior=True,
     estimate_sem=True,
-    folder="toy_stationary",
+    folder=None,
     num_anchor_points=100,
     n_obs_t=None,
     sample_anchor_points=False,
@@ -293,258 +288,6 @@ def run_all_opt_models(
     return models_list, names_list
 
 
-def run_methods_replicates_parallel(
-    seed,
-    graph,
-    sem,
-    make_sem_hat,
-    intervention_domain,
-    method,
-    observational_samples,
-    gt,
-    save_metrics=True,
-    total_timesteps=3,
-    number_of_trials=3,
-    initial_interventions=False,
-    n_restart=1,
-    save_data=True,
-    online=True,
-    N_obs=100,
-    N_t=50,
-    cost_structure=1,
-    sample_count=10,
-    CBO_concat_DO=False,
-    CBO_concat_DI=False,
-    DCBO_concat_DO=False,
-):
-
-    #  Structural equation model
-    initial_structural_equation_model = sem().static()
-    structural_equation_model = sem().dynamic()
-
-    Graph = nx_agraph.from_agraph(pygraphviz.AGraph(graph))
-
-    opt_result_for_pickle = {}
-
-    if initial_interventions is False:
-        interventional_samples = None
-        number_of_interventions = None
-    else:
-        interventional_samples = simulate_interventional_data_for_sequential_LinearToyDBN(
-            Graph, intervention_domain, initial_structural_equation_model, structural_equation_model, seed=seed,
-        )
-        number_of_interventions = 1
-
-    np.random.seed(seed)
-    if observational_samples is None:
-        observational_samples = sequentially_sample_model(
-            initial_structural_equation_model,
-            structural_equation_model,
-            total_timesteps=total_timesteps,
-            sample_count=N_obs,
-        )
-
-    input_params = {
-        "graph": graph,
-        "sem": sem,
-        "make_sem_hat": make_sem_hat,
-        "observational_samples": observational_samples,
-        "intervention_domain": intervention_domain,
-        "interventional_samples": interventional_samples,
-        "estimate_sem": True,
-        "base_target_variable": "Y",
-        "task": "min",
-        "cost_type": cost_structure,
-        "number_of_trials": number_of_trials,
-        "number_of_interventions": number_of_interventions,  # Allows us to sub-sample interventions if more than one
-        "filtering": True,
-        "gt": gt,
-        "save_metrics": save_metrics,
-        "n_restart": n_restart,
-        "use_mc": False,
-        "debug_mode": False,
-        "N_t": N_t,
-        "N_epsilon": 1,
-        "online": online,
-    }
-
-    if method == "DCBO":
-        input_params["dynamic"] = True
-        input_params["causal_prior"] = True
-        input_params["concat_DO"] = DCBO_concat_DO
-    elif method == "CBO":
-        input_params["dynamic"] = False
-        input_params["causal_prior"] = True
-        input_params["concat_DO"] = CBO_concat_DO
-        input_params["concat_DI"] = CBO_concat_DI
-    elif method == "ABO":
-        input_params["dynamic"] = True
-        input_params["causal_prior"] = False
-    else:
-        input_params["dynamic"] = False
-        input_params["causal_prior"] = False
-
-    model = DCBO(**input_params)
-    model.run_optimization()
-
-    del input_params
-
-    if save_metrics is False:
-        model_rmse = [None]
-    else:
-        model_rmse = model.model_rmse
-
-    opt_result_for_pickle[method] = (
-        model.per_trial_cost,
-        model.optimal_outcome_values_during_trials,
-        model_rmse,
-    )
-
-    if save_data:
-        # Check if pickle file is alreay there, if not store it in location
-        my_file = Path(
-            "../data/synthetic/{}_synthetic_runs_s_{}_t_{}_cost_{}.pickle".format(
-                method, seed, number_of_trials, cost_structure
-            )
-        )
-        if not my_file.is_file():
-            # File is not there, so we create
-            with open(
-                "../data/synthetic/{}_synthetic_runs_s_{}_t_{}_cost_{}.pickle".format(
-                    method, seed, number_of_trials, cost_structure
-                ),
-                "wb",
-            ) as handle:
-                #  We have to use dill because our object contains lambda functions.
-                pickle.dump(opt_result_for_pickle, handle)
-                handle.close()
-
-    return model
-
-
-def simulate_interventional_data_for_sequential_LinearToyDBN(
-    graph, intervention_domain, initial_structural_equation_model, structural_equation_model, seed=0,
-):
-    np.random.seed(seed)
-
-    interventional_data = {k: None for k in powerset(["X", "Z"])}
-
-    canonical_exploration_sets = list(powerset(intervention_domain.keys()))
-
-    # Get the interventional grids
-    interventional_grids = get_interventional_grids(
-        canonical_exploration_sets, intervention_domain, size_intervention_grid=100
-    )
-    levels = {es: None for es in canonical_exploration_sets}
-    for es in canonical_exploration_sets:
-        idx = np.random.randint(0, interventional_grids[es].shape[0])  # Random indices
-        levels[es] = interventional_grids[es][idx, :]
-
-    """
-    do(Z_0)
-    """
-    interv, T = make_sequential_intervention_dictionary(graph)
-    # Univariate intervention at time 0
-    interv["Z"][0] = float(levels[("Z",)])
-    static_noise_model = {k: np.zeros(T) for k in ["X", "Z", "Y"]}
-    # Sample this model with one intervention
-    intervention_samples = sequentially_sample_model(
-        initial_structural_equation_model,
-        structural_equation_model,
-        total_timesteps=T,
-        interventions=interv,
-        sample_count=1,
-        epsilon=static_noise_model,
-    )
-    interventional_data[("Z",)] = get_monte_carlo_expectation(intervention_samples)
-
-    """
-    do(X_0)
-    """
-    interv, T = make_sequential_intervention_dictionary(graph)
-    # Univariate intervention
-    interv["X"][0] = float(levels[("X",)])
-    # Sample this model with one intervention
-    intervention_samples = sequentially_sample_model(
-        initial_structural_equation_model,
-        structural_equation_model,
-        total_timesteps=T,
-        interventions=interv,
-        sample_count=1,
-        epsilon=static_noise_model,
-    )
-    interventional_data[("X",)] = get_monte_carlo_expectation(intervention_samples)
-
-    """
-    do(Z_0, X_0)
-    """
-    interv, T = make_sequential_intervention_dictionary(graph)
-    # Multivariate intervention
-    interv["X"][0] = float(levels[("X",)][0])
-    interv["Z"][0] = float(levels[("Z",)][0])
-
-    intervention_samples = sequentially_sample_model(
-        initial_structural_equation_model,
-        structural_equation_model,
-        total_timesteps=T,
-        interventions=interv,
-        sample_count=1,
-        epsilon=static_noise_model,
-    )
-
-    interventional_data[("X", "Z")] = get_monte_carlo_expectation(intervention_samples)
-
-    return interventional_data
-
-
-def simulate_interventional_data_for_sequential_ComplexDBN(
-    graph, intervention_domain, initial_structural_equation_model, structural_equation_model, variables, T, seed=0,
-):
-    np.random.seed(seed)
-
-    interventional_data = {k: None for k in powerset(variables)}
-
-    canonical_exploration_sets = list(powerset(intervention_domain.keys()))
-
-    # Get the interventional grids
-    interventional_grids = get_interventional_grids(
-        canonical_exploration_sets, intervention_domain, size_intervention_grid=100
-    )
-    levels = {es: None for es in canonical_exploration_sets}
-    for es in canonical_exploration_sets:
-        idx = np.random.randint(0, interventional_grids[es].shape[0])  # Random indices
-        levels[es] = interventional_grids[es][idx, :]
-
-    static_noise_model = {k: np.zeros(T) for k in variables + ["Y"]}
-
-    for var in canonical_exploration_sets:
-        var = list(var)
-
-        intervention, _ = make_sequential_intervention_dictionary(graph)
-        if len(var) == 1:
-            intervention[var[0]][0] = float(levels[tuple(var)])
-        elif len(var) == 2:
-            intervention[var[0]][0] = float(levels[tuple(var[0])])
-            intervention[var[1]][0] = float(levels[tuple(var[1])])
-        else:
-            intervention[var[0]][0] = float(levels[tuple(var[0])])
-            intervention[var[1]][0] = float(levels[tuple(var[1])])
-            intervention[var[2]][0] = float(levels[tuple(var[2])])
-
-        # Sample this model with one intervention
-        intervention_samples = sequentially_sample_model(
-            initial_structural_equation_model,
-            structural_equation_model,
-            total_timesteps=T,
-            interventions=intervention,
-            sample_count=1,
-            epsilon=static_noise_model,
-        )
-        interventional_data[tuple(var)] = get_monte_carlo_expectation(intervention_samples)
-
-    return interventional_data
-
-
 def optimal_sequence_of_interventions(
     exploration_sets,
     interventional_grids,
@@ -672,95 +415,6 @@ def optimal_sequence_of_interventions(
         y_stars,
         optimal_interventions,
         all_CE,
-    )
-
-
-def plot_optimisation_outcomes(
-    ax,
-    i,
-    interventional_grids,
-    mean_function,
-    time_index,
-    exploration_set,
-    true_causal_effects,
-    vmin,
-    vmax,
-    X_I_train,
-    Y_I_train,
-    observational_samples,
-    time_slice_batch_indices,
-    objective_values,
-    n,
-):
-    #  Mean function
-    ax[i].plot(
-        interventional_grids[exploration_set],
-        mean_function,
-        lw=2,
-        color="b",
-        ls="--",
-        label=r"$m_{{{}_{}}}$".format(exploration_set[0], time_index),
-    )
-    # True causal effect at time_index
-    ax[i].plot(
-        interventional_grids[exploration_set],
-        np.array(true_causal_effects[time_index][exploration_set]),
-        lw=4,
-        color="r",
-        alpha=0.5,
-        label="Target CE",
-    )
-    # Confidence interval
-    ax[i].fill_between(
-        interventional_grids[exploration_set].squeeze(),
-        vmin.squeeze(),
-        vmax.squeeze(),
-        color="b",
-        alpha=0.25,
-        label="95\% CI",
-    )
-    # Interventions
-    ax[i].scatter(
-        X_I_train,
-        Y_I_train,
-        s=200,
-        marker=".",
-        c="g",
-        label=r"$\mathcal{{D}}^I_{}, |\mathcal{{D}}^I_{}| = {}$".format(time_index, time_index, n),
-        linewidths=2,
-        zorder=10,
-    )
-    # Observations
-    ax[i].scatter(
-        observational_samples[exploration_set[0]][time_slice_batch_indices[time_index], time_index],
-        1.5
-        * objective_values[exploration_set][time_index]
-        * np.ones_like(observational_samples[exploration_set[0]][time_slice_batch_indices[time_index], time_index]),
-        s=100,
-        marker="x",
-        c="k",
-        label=r"$\mathcal{{D}}^O_{}, |\mathcal{{D}}^O_{}| = {}$".format(
-            time_index,
-            time_index,
-            len(observational_samples[exploration_set[0]][time_slice_batch_indices[time_index], time_index]),
-        ),
-        alpha=0.5,
-        linewidths=1,
-    )
-    ax[i].set_xlabel("${}_{}$".format(exploration_set[0], time_index))
-    if time_index == 0:
-        ax[i].set_ylabel(
-            r"$\mathbb{{E}}[{}_{} \mid \textrm{{do}}({}_{})]$".format("Y", time_index, exploration_set[0], time_index)
-        )
-    else:
-        es_star, _ = max(objective_values.items(), key=lambda x: x[time_index - 1])
-        ax[i].set_ylabel(
-            r"$\mathbb{{E}}[{}_{} \mid \textrm{{do}}({}_{}),\textrm{{did}}({}_{}) ]$".format(
-                "Y", time_index, exploration_set[0], time_index, es_star[0], time_index - 1,
-            )
-        )
-    ax[i].legend(
-        ncol=1, fontsize="medium", loc="lower center", frameon=False, bbox_to_anchor=(1.2, 0.4),
     )
 
 

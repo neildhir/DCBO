@@ -243,9 +243,27 @@ def make_sem_complex_hat(emission_fncs: dict, transition_fncs: dict) -> classmet
     return semhat
 
 
-def auto_sem_dependent_stationary_hat(
+def auto_sem_dependent_hat(
     variables: Iterable, root_instrument: bool, emission_functions: dict, transition_functions: dict
 ) -> classmethod:
+    """This function is used to automatically create the estimates for the edges in a given graph.
+
+    Parameters
+    ----------
+    variables : Iterable
+        A list of causally ordered variables per time-slice.
+    root_instrument : bool
+        Tells the function if the first varible should be treated as an instrument node and thus has no incoming edges from the previous time-slice. This is always true for t=0.
+    emission_functions : dict
+        A dictionary of fitted emission functions.
+    transition_functions : dict
+        A dictionary of fitted transition functions.
+
+    Returns
+    -------
+    classmethod
+        A SEM estimate found using observational data only; used in finding the optimal intervention set and values for CBO and DCBO.
+    """
 
     # XXX: this function will eventually be passed the full adjacency matrix for the graph.
 
@@ -291,6 +309,7 @@ def auto_sem_dependent_stationary_hat(
         def dynamic(self, moment: int):
             assert moment in [0, 1], moment
             functions = OrderedDict()
+            # Assume variables are causally ordered
             for i, var in enumerate(variables):
                 if i == 0:
                     if root_instrument:
