@@ -1,6 +1,6 @@
 # Dynamic Causal Bayesian Optimization
 
-This is a Python implementation of [Dynamic Causal Bayesian Optimization](https://nips.cc/) presented at Neurips 2021.
+This is a Python implementation of [Dynamic Causal Bayesian Optimization](https://nips.cc/) as presented at Neurips 2021.
 
 ## Abstract
 
@@ -14,18 +14,13 @@ This paper studies the problem of performing a sequence of optimal interventions
 
 ## Authors
 
-- [Virginia Aglietti](https://uk.linkedin.com/in/virginia-aglietti-a80321a4)
-- [Neil Dhir](https://neildhir.github.io/)
-- [Javier Gonzalez](https://javiergonzalezh.github.io/)
-- [Theodoros Damoulas](https://warwick.ac.uk/fac/sci/statistics/staff/academic-research/damoulas/)
+[Virginia Aglietti](https://uk.linkedin.com/in/virginia-aglietti-a80321a4), [Neil Dhir](https://neildhir.github.io/), [Javier Gonzalez](https://javiergonzalezh.github.io/) and [Theodoros Damoulas](https://warwick.ac.uk/fac/sci/statistics/staff/academic-research/damoulas/)
 
 ## TODO
 
 - Write tutorials
 
 - Check license
-
-- Write proper main README file
 
 - Parallelise sampling functions so that they are not sequential, that is far too slow
 
@@ -37,7 +32,7 @@ This paper studies the problem of performing a sequence of optimal interventions
 
 ## Installation
 
-Test
+conda or pip
 
 ### Requirements
 
@@ -48,14 +43,8 @@ Test
 
 ## Demo and tutorials
 
-Test
-
-### Data
-
-The data used for the real experiments in section four of the paper can be found here:
-
-- hi
-- hi
+- [stat_scm.ipynb](notebooks/stat_scm.ipynb) walks through the basic steps required to run all methods (BO, ABO, CBO and DCBO) on the example SCM shown in figure 1 of the paper.
+- [nonstat_scm.ipynb](notebooks/stat_scm.ipynb) demonstrates how to run the methods on the SCM with the DAG shown in figure 3(c) of the paper, but using machinery which contains the experiments to just a few function calls.
 
 ## Citation
 
@@ -72,8 +61,6 @@ Please cite the NeurIPS paper if you use DCBO in your work:
 ```
 
 ## License
-
-**placeholder**
 
 This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 3 of the License, or (at your option) any later version.
 
