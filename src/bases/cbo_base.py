@@ -50,7 +50,6 @@ class BaseClassCBO:
         args_sem=None,
         manipulative_variables=None,
         change_points: list = None,
-        root_instrument: bool = None,
     ):
         self.debug_mode = debug_mode
         if args_sem is None and change_points is None:
@@ -78,7 +77,6 @@ class BaseClassCBO:
         assert isinstance(G, MultiDiGraph)
         self.graph = G
         self.sem_variables = [v.split("_")[0] for v in [v for v in G.nodes if v.split("_")[1] == "0"]]
-        self.root_instrument = root_instrument
         self.node_children = {node: None for node in self.graph.nodes}
         self.node_parents = {node: None for node in self.graph.nodes}
         self.emission_pairs = {}

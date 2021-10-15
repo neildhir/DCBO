@@ -61,7 +61,6 @@ class CBO(BaseClassCBO):
         args_sem=None,
         manipulative_variables=None,
         change_points: list = None,
-        root_instrument: bool = None,
     ):
         super().__init__(
             G,
@@ -85,7 +84,6 @@ class CBO(BaseClassCBO):
             args_sem,
             manipulative_variables,
             change_points,
-            root_instrument,
         )
         self.concat = concat
         self.optimal_assigned_blankets = optimal_assigned_blankets
