@@ -18,9 +18,9 @@ from tqdm import trange
 class DCBO(BaseClassDCBO):
     def __init__(
         self,
-        graph: str,
+        G: str,
         sem: classmethod,
-        make_sem_hat: Callable,
+        make_sem_estimator: Callable,
         observational_samples: dict,
         intervention_domain: dict,
         interventional_samples: dict,
@@ -51,9 +51,9 @@ class DCBO(BaseClassDCBO):
         root_instrument: bool = None,
     ):
         super().__init__(
-            graph,
+            G,
             sem,
-            make_sem_hat,
+            make_sem_estimator,
             observational_samples,
             intervention_domain,
             interventional_samples,
@@ -149,10 +149,10 @@ class DCBO(BaseClassDCBO):
                     assert int(target_temporal_index) == temporal_index
 
                     new_sem_hat = self.make_sem_hat(
-                        variables=self.sem_variables,
-                        root_instrument=self.root_instrument,
+                        summary_graph_node_parents = self.summary_graph_node_parents,
                         emission_functions=self.sem_emit_fncs,
                         transition_functions=self.sem_trans_fncs,
+                        root_instrument=self.root_instrument,
                     )
                     self.static_sem = new_sem_hat().static(moment=0)  # for t = 0
                     self.sem = new_sem_hat().dynamic(moment=0)  # for t > 0

@@ -41,7 +41,7 @@ def make_graphical_model(start_time, stop_time, topology, nodes, target_node=Non
         assert target_node is not None
         assert isinstance(target_node, str)
 
-    ## Spatial connections
+    ## Time-slice connections
 
     spatial_edges = []
     ranking = []
@@ -86,6 +86,10 @@ def make_graphical_model(start_time, stop_time, topology, nodes, target_node=Non
     ## Temporal connections
 
     temporal_edges = []
+    if topology == "independent":
+        node_count += 1
+        nodes += [target_node]
+
     connections = node_count * "{}_{} -> {}_{}; "
     for t in range(stop_time):
         edge_pairs = repeat(nodes, 2).tolist()

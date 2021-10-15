@@ -33,7 +33,7 @@ from tqdm import trange
 class CBO(BaseClassCBO):
     def __init__(
         self,
-        graph: str,
+        G: str,
         sem: classmethod,
         make_sem_hat: Callable,
         observational_samples: dict,
@@ -64,7 +64,7 @@ class CBO(BaseClassCBO):
         root_instrument: bool = None,
     ):
         super().__init__(
-            graph,
+            G,
             sem,
             make_sem_hat,
             observational_samples,
@@ -145,10 +145,8 @@ class CBO(BaseClassCBO):
                         assert int(target_temporal_index) == temporal_index
                         # new_sem_hat = self.make_sem_hat(self.sem_emit_fncs, None)
                         new_sem_hat = self.make_sem_hat(
-                            variables=self.sem_variables,
-                            root_instrument=self.root_instrument,
+                            summary_graph_node_parents=self.summary_graph_node_parents,
                             emission_functions=self.sem_emit_fncs,
-                            transition_functions=None,
                         )
                         self.static_sem = new_sem_hat().static(moment=0)
                     else:

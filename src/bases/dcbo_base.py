@@ -21,13 +21,13 @@ class BaseClassDCBO(Root):
         self,
         graph: str,
         sem: classmethod,
-        make_sem_hat: callable,
+        make_sem_estimator: callable,
         observational_samples: dict,
         intervention_domain: dict,
         interventional_samples: dict = None,  # Interventional data collected for specific intervention sets
         exploration_sets: list = None,
         estimate_sem: bool = False,
-        base_target_variable: str = "y",
+        base_target_variable: str = "Y",
         task: str = "min",
         cost_type: int = 1,  # There are multiple options here
         number_of_trials=10,
@@ -45,7 +45,7 @@ class BaseClassDCBO(Root):
         super().__init__(
             graph,
             sem,
-            make_sem_hat,
+            make_sem_estimator,
             observational_samples,
             intervention_domain,
             interventional_samples,
@@ -67,22 +67,22 @@ class BaseClassDCBO(Root):
 
         self.use_mc = use_mc
 
-        self.sem_variables = [v.split("_")[0] for v in [v for v in self.graph.nodes if v.split("_")[1] == "0"]]
+        # self.sem_variables = [v.split("_")[0] for v in [v for v in self.graph.nodes if v.split("_")[1] == "0"]]
         self.root_instrument = root_instrument
-        self.node_children = {node: None for node in self.graph.nodes}
-        self.node_parents = {node: None for node in self.graph.nodes}
+        self.node_children = {node: None for node in self.G.nodes}
+        self.node_parents = {node: None for node in self.G.nodes}
         self.emission_pairs = {}
 
         # Children of all nodes
-        for node in self.graph.nodes:
-            self.node_children[node] = list(self.graph.successors(node))
+        for node in self.G.nodes:
+            self.node_children[node] = list(self.G.successors(node))
 
         #  Parents of all nodes
-        for node in self.graph.nodes:
-            self.node_parents[node] = tuple(self.graph.predecessors(node))
+        for node in self.G.nodes:
+            self.node_parents[node] = tuple(self.G.predecessors(node))
 
         emissions = {t: [] for t in range(self.T)}
-        for e in self.graph.edges:
+        for e in self.G.edges:
             _, inn_time = e[0].split("_")
             _, out_time = e[1].split("_")
             # Emission edge
@@ -95,7 +95,7 @@ class BaseClassDCBO(Root):
             for a, b in combinations(emissions[t], 2):
                 if a[1] == b[1]:
                     new_emissions[t].append(((a[0], b[0]), a[1]))
-                    cond = [v for v in list(self.graph.predecessors(b[0])) if v.split("_")[1] == str(t)]
+                    cond = [v for v in list(self.G.predecessors(b[0])) if v.split("_")[1] == str(t)]
                     if len(cond) != 0 and cond[0] == a[0]:
                         # Remove from list
                         new_emissions[t].remove(a)
@@ -304,7 +304,7 @@ class BaseClassDCBO(Root):
 
     def _forward_propagation(self, temporal_index):
 
-        empty_blanket, _ = make_sequential_intervention_dictionary(self.graph)
+        empty_blanket, _ = make_sequential_intervention_dictionary(self.G)
         res = []
 
         assert temporal_index > 0

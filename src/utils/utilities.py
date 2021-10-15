@@ -728,13 +728,6 @@ def optimisation_type_reminder(causal_prior, dynamic):
     2) Dynamic BO   : (causal_prior == False, dynamic == True)
     3) CBO          : (causal_prior == True, dynamic == False)
     4) BO           : (causal_prior == False, dynamic == False)
-
-    Parameters
-    ----------
-    causal_prior : bool
-        [description]
-    dynamic : bool
-        [description]
     """
     opt = {
         (True, True): "DCBO",

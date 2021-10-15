@@ -5,6 +5,7 @@ from typing import Callable
 import numpy as np
 from matplotlib import pyplot as plt
 from networkx.classes.multidigraph import MultiDiGraph
+from networkx import topological_sort
 from numpy.core.multiarray import ndarray
 from numpy.core.numeric import nan
 from src.bayes_opt.cost_functions import define_costs
@@ -30,9 +31,9 @@ class Root:
 
     def __init__(
         self,
-        graph: str,
+        G: str,
         sem: classmethod,
-        make_sem_hat: Callable,
+        make_sem_estimator: Callable,
         observational_samples: dict,
         intervention_domain: dict,
         interventional_samples: dict = None,  # interventional data collected for specific intervention sets
@@ -61,10 +62,10 @@ class Root:
         # These will be used in the target function evaluation
         self.true_initial_sem = true_sem.static()  # for t = 0
         self.true_sem = true_sem.dynamic()  # for t > 0
-        self.make_sem_hat = make_sem_hat
+        self.make_sem_hat = make_sem_estimator
 
-        assert isinstance(graph, MultiDiGraph)
-        self.graph = graph
+        assert isinstance(G, MultiDiGraph)
+        self.G = G
         self.debug_mode = debug_mode
         # Number of optimization restart for GPs
         self.n_restart = n_restart
@@ -73,6 +74,16 @@ class Root:
         # Total time-steps and sample count per time-step
         _, self.T = observational_samples[list(observational_samples.keys())[0]].shape
         self.observational_samples = observational_samples
+
+        #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
+        gg = self.G.subgraph([v + "_0" for v in observational_samples.keys()])
+        #  Causally ordered nodes in the first time-slice
+        self.causal_order = list(v.split("_")[0] for v in topological_sort(gg))
+        #  See page 199 of 'Elements of Causal Inference' for a reference on summary graphs.
+        self.summary_graph_node_parents = {
+            v.split("_")[0]: tuple([vv.split("_")[0] for vv in gg.predecessors(v)]) for v in gg.nodes
+        }
+        assert self.causal_order == list(self.summary_graph_node_parents.keys())
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task
@@ -88,13 +99,13 @@ class Root:
         self.number_of_trials = number_of_trials
 
         # Instantiate blanket that will form final solution
-        (self.optimal_blanket, self.total_timesteps,) = make_sequential_intervention_dictionary(self.graph)
+        (self.optimal_blanket, self.total_timesteps,) = make_sequential_intervention_dictionary(self.G)
 
         # Contains all values a assigned as the DCBO walks through the graph;
         # optimal intervention level are assigned at the same temporal level,
         # for which we then use spatial SEMs to predict the other variable levels on that time-slice.
         self.assigned_blanket = deepcopy(self.optimal_blanket)
-        self.empty_intervention_blanket, _ = make_sequential_intervention_dictionary(self.graph)
+        self.empty_intervention_blanket, _ = make_sequential_intervention_dictionary(self.G)
 
         # Canonical manipulative variables
         if manipulative_variables is None:
@@ -111,7 +122,7 @@ class Root:
         self.exploration_sets = exploration_sets
 
         # Extract all target variables from the causal graphical model
-        self.all_target_variables = list(filter(lambda k: self.base_target_variable in k, self.graph.nodes))
+        self.all_target_variables = list(filter(lambda k: self.base_target_variable in k, self.G.nodes))
 
         # Get the interventional grids
         self.interventional_grids = get_interventional_grids(
@@ -192,7 +203,7 @@ class Root:
         for temporal_index in range(self.T):
             for es in self.exploration_sets:
                 self.target_functions[temporal_index][es] = evaluate_target_function(
-                    self.true_initial_sem, self.true_sem, self.graph, es, self.observational_samples.keys(), self.T,
+                    self.true_initial_sem, self.true_sem, self.G, es, self.observational_samples.keys(), self.T,
                 )
 
         # Parameter space for optimisation

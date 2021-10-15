@@ -3,6 +3,7 @@ from itertools import combinations
 from random import choice
 from typing import Callable
 
+from networkx.algorithms.dag import topological_sort
 from networkx.classes.multidigraph import MultiDiGraph
 from src.bayes_opt.cost_functions import define_costs
 from src.utils.sem_utils.emissions import fit_sem_complex
@@ -28,7 +29,7 @@ class BaseClassCBO:
 
     def __init__(
         self,
-        graph: str,
+        G: str,
         sem: classmethod,
         make_sem_hat: Callable,
         observational_samples: dict,
@@ -74,9 +75,9 @@ class BaseClassCBO:
 
         # Total time-steps and sample count per time-step
         _, T = observational_samples[list(observational_samples.keys())[0]].shape
-        assert isinstance(graph, MultiDiGraph)
-        self.graph = graph
-        self.sem_variables = [v.split("_")[0] for v in [v for v in graph.nodes if v.split("_")[1] == "0"]]
+        assert isinstance(G, MultiDiGraph)
+        self.graph = G
+        self.sem_variables = [v.split("_")[0] for v in [v for v in G.nodes if v.split("_")[1] == "0"]]
         self.root_instrument = root_instrument
         self.node_children = {node: None for node in self.graph.nodes}
         self.node_parents = {node: None for node in self.graph.nodes}
@@ -91,7 +92,7 @@ class BaseClassCBO:
             self.node_parents[node] = tuple(self.graph.predecessors(node))
 
         emissions = {t: [] for t in range(T)}
-        for e in graph.edges:
+        for e in G.edges:
             _, inn_time = e[0].split("_")
             _, out_time = e[1].split("_")
             # Emission edgee
@@ -104,7 +105,7 @@ class BaseClassCBO:
             for a, b in combinations(emissions[t], 2):
                 if a[1] == b[1]:
                     new_emissions[t].append(((a[0], b[0]), a[1]))
-                    cond = [v for v in list(graph.predecessors(b[0])) if v.split("_")[1] == str(t)]
+                    cond = [v for v in list(G.predecessors(b[0])) if v.split("_")[1] == str(t)]
                     if len(cond) != 0 and cond[0] == a[0]:
                         # Remove from list
                         new_emissions[t].remove(a)
@@ -126,6 +127,16 @@ class BaseClassCBO:
 
         # XXX: assumes that we have the same initial obs count per variable. Not true for most real problems.
         self.number_of_trials = number_of_trials
+
+        #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
+        gg = self.G.subgraph([v + "_0" for v in observational_samples.keys()])
+        #  Causally ordered nodes in the first time-slice
+        self.causal_order = list(v.split("_")[0] for v in topological_sort(gg))
+        #  See page 199 of 'Elements of Causal Inference' for a reference on summary graphs.
+        self.summary_graph_node_parents = {
+            v.split("_")[0]: tuple([vv.split("_")[0] for vv in gg.predecessors(v)]) for v in gg.nodes
+        }
+        assert self.causal_order == list(self.summary_graph_node_parents.keys())
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task

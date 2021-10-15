@@ -244,20 +244,24 @@ def make_sem_complex_hat(emission_fncs: dict, transition_fncs: dict) -> classmet
 
 
 def auto_sem_dependent_hat(
-    variables: Iterable, root_instrument: bool, emission_functions: dict, transition_functions: dict
+    summary_graph_node_parents: dict,
+    emission_functions: dict,
+    transition_functions: dict = None,
+    root_instrument: bool = None,
 ) -> classmethod:
-    """This function is used to automatically create the estimates for the edges in a given graph.
+    """
+    This function is used to automatically create the estimates for the edges in a given graph.
 
     Parameters
     ----------
-    variables : Iterable
-        A list of causally ordered variables per time-slice.
-    root_instrument : bool
-        Tells the function if the first varible should be treated as an instrument node and thus has no incoming edges from the previous time-slice. This is always true for t=0.
+    summary_graph_node_parents: Iterable
+        A dictionary with causally ordered keys for the summary graph, with values containing the parents of the variables in that graph
     emission_functions : dict
         A dictionary of fitted emission functions.
     transition_functions : dict
         A dictionary of fitted transition functions.
+    root_instrument : bool
+        Tells the function if the first varible should be treated as an instrument node and thus has no incoming edges from the previous time-slice. This is always true for t=0.
 
     Returns
     -------
@@ -269,17 +273,20 @@ def auto_sem_dependent_hat(
 
     class semhat:
         @staticmethod
-        def _make_some_white_noise_function() -> Callable:
+        def _make_white_noise_fnc() -> Callable:
+            #  Instrument variable samples the exogenous model which we take to be white noise
             return lambda: randn()
 
         @staticmethod
-        def _make_static_function(moment: int) -> Callable:
+        def _make_static_fnc(moment: int) -> Callable:
+            #  No temporal dependence
             return lambda t, emit_input_var, sample: emission_functions[t][emit_input_var].predict(
                 select_sample(sample, emit_input_var, t)
             )[moment]
 
         @staticmethod
-        def _make_dynamic_function(moment: int) -> Callable:
+        def _make_dynamic_fnc(moment: int) -> Callable:
+            #  Temporal dependence
             return (
                 lambda t, transfer_input_vars, emit_input_vars, sample: transition_functions[
                     transfer_input_vars
@@ -288,7 +295,7 @@ def auto_sem_dependent_hat(
             )
 
         @staticmethod
-        def _make_dynamic_transfer_only_function(moment: int) -> Callable:
+        def _make_only_dynamic_transfer_fnc(moment: int) -> Callable:
             return lambda t, transfer_input_vars, _, sample: transition_functions[transfer_input_vars].predict(
                 select_sample(sample, transfer_input_vars, t - 1)
             )[moment]
@@ -297,45 +304,50 @@ def auto_sem_dependent_hat(
             assert moment in [0, 1], moment
             functions = OrderedDict()
             # Assume variables are causally ordered
-            for i, var in enumerate(variables):
-                if i == 0:
+            for i, v in enumerate(summary_graph_node_parents):
+                if i == 0 or not summary_graph_node_parents[v]:
                     # This is how CBO 'views' the graph.
-                    # Always sample from the exogenous model at the root node
-                    functions[var] = self._make_some_white_noise_function()
+                    # Always sample from the exogenous model at the root node and instrument variables -- unless other models are specified
+                    functions[v] = self._make_white_noise_fnc()
                 else:
-                    functions[var] = self._make_static_function(moment)
+                    functions[v] = self._make_static_fnc(moment)
             return functions
 
         def dynamic(self, moment: int):
             assert moment in [0, 1], moment
             functions = OrderedDict()
             # Assume variables are causally ordered
-            for i, var in enumerate(variables):
-                if i == 0:
+            for i, v in enumerate(summary_graph_node_parents):
+                if i == 0 and not summary_graph_node_parents[v]:
                     if root_instrument:
                         """
-                        Root node in the time-slice, without any time dependence
+                        Instrument variable in the time-slice, without any time dependence
                         o   o Node at time t
                             |
-                            |
-                            V
+                            v
                             o Child node at time t
-
-                        This is how CBO 'views' the graph.
                         """
-                        functions[var] = self._make_some_white_noise_function()
+                        functions[v] = self._make_white_noise_fnc()
                     else:
                         """
                         Root node in the time-slice, with time dependence
                         o-->o Node at time t with dependence from time t-1
                             |
-                            |
-                            V
+                            v
                             o Child node at time t
                         """
-                        functions[var] = self._make_dynamic_transfer_only_function(moment)
+                        functions[v] = self._make_only_dynamic_transfer_fnc(moment)
+                elif not summary_graph_node_parents[v]:
+                    """
+                    Instrument variable in the time-slice, without any time dependence
+                    o   o Node at time t
+                        |
+                        v
+                        o Child node at time t
+                    """
+                    functions[v] = self._make_white_noise_fnc()
                 else:
-                    functions[var] = self._make_dynamic_function(moment)
+                    functions[v] = self._make_dynamic_fnc(moment)
             return functions
 
     return semhat
