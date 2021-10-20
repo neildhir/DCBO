@@ -6,7 +6,7 @@ from typing import Callable
 from networkx.algorithms.dag import topological_sort
 from networkx.classes.multidigraph import MultiDiGraph
 from src.bayes_opt.cost_functions import define_costs
-from src.utils.sem_utils.emissions import fit_sem_complex
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
@@ -121,7 +121,7 @@ class BaseClassCBO:
         self.emission_pairs = update_emission_pairs_keys(T, self.node_parents, self.emission_pairs)
 
         self.estimate_sem = estimate_sem
-        self.sem_emit_fncs = fit_sem_complex(observational_samples, self.emission_pairs)
+        self.sem_emit_fncs = fit_sem_emit_fncs(observational_samples, self.emission_pairs)
 
         # XXX: assumes that we have the same initial obs count per variable. Not true for most real problems.
         self.number_of_trials = number_of_trials

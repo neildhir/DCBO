@@ -81,6 +81,7 @@ def auto_sem_hat(
             return f
 
         def dynamic(self, moment: int):
+            # TODO: put back the functions that I removed
             assert moment in [0, 1], moment
             # SEM functions
             f = OrderedDict()
@@ -107,6 +108,15 @@ def auto_sem_hat(
                     """
                     assert not summary_graph_node_parents[v], summary_graph_node_parents
                     f[v] = self._make_only_dynamic_transfer_fnc(moment)
+                elif i > 0 and independent_causes[v] and not summary_graph_node_parents[v]:
+                    """
+                    Variable in the time-slice, without any time dependence
+                        o Node at time t
+                    x   |
+                      \ v
+                        o Child node at time t
+                    """
+                    f[v] = self._make_white_noise_fnc()
                 elif i > 0 and not summary_graph_node_parents[v]:
                     """
                     Node in the time-slice, with time dependence

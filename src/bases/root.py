@@ -5,10 +5,10 @@ from typing import Callable
 import numpy as np
 from matplotlib import pyplot as plt
 from networkx.classes.multidigraph import MultiDiGraph
-from networkx import topological_sort
 from numpy.core.multiarray import ndarray
 from numpy.core.numeric import nan
 from src.bayes_opt.cost_functions import define_costs
+from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
@@ -76,18 +76,10 @@ class Root:
         self.observational_samples = observational_samples
 
         #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
-        gg = self.G.subgraph([v + "_0" for v in observational_samples.keys()])
-        #  Causally ordered nodes in the first time-slice
-        self.causal_order = list(v.split("_")[0] for v in topological_sort(gg))
-        #  See page 199 of 'Elements of Causal Inference' for a reference on summary graphs.
-        summary_graph_node_parents = {
-            v.split("_")[0]: tuple([vv.split("_")[0] for vv in gg.predecessors(v)]) for v in gg.nodes
-        }
-        # Re-order dict to follow causal order of time-slices
-        self.summary_graph_node_parents = {k: summary_graph_node_parents[k] for k in self.causal_order}
-
+        time_slice_vars = observational_samples.keys()
+        self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
         #  Checks what vars in DAG (if any) are independent causes
-        self._get_independent_causes()
+        self.independent_causes = get_independent_causes(time_slice_vars, G)
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task
@@ -228,22 +220,6 @@ class Root:
         self.estimate_sem = estimate_sem
         if self.estimate_sem:
             self.assigned_blanket_hat = deepcopy(self.optimal_blanket)
-
-    def _get_independent_causes(self):
-
-        time_slice_vars = self.observational_samples.keys()
-        self.independent_causes = {v: False for v in time_slice_vars}
-
-        # Get induced sub-graph from first two time-slices
-        gg = self.G.subgraph([v + "_0" for v in time_slice_vars] + [v + "_1" for v in time_slice_vars])
-        # Find parents of all nodes in this sub-graph
-        gg_parents = {v: tuple([vv for vv in gg.predecessors(v)]) for v in gg.nodes}
-        # Check which nodes are independent singelton cause variables in both time-slices
-        possible_singletons = [v.split("_")[0] for v in [key for key in gg if not gg_parents[key]]]
-        singleton_causes = [v for v in set(possible_singletons) if possible_singletons.count(v) > 1]
-        #  Indicate found instrument
-        for v in singleton_causes:
-            self.independent_causes[v] = True
 
     def _update_opt_params(self, it: int, temporal_index: int, best_es: tuple) -> None:
 

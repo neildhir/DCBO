@@ -3,8 +3,8 @@ from itertools import combinations
 
 import numpy as np
 from src.utils.gp_utils import fit_gp, sequential_sample_from_complex_model_hat
-from src.utils.sem_utils.emissions import fit_sem_complex
-from src.utils.sem_utils.transitions import fit_sem_transition_functions_complex
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs
+from src.utils.sem_utils.transitions import fit_sem_trans_fncs
 from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
 from src.utils.utilities import convert_to_dict_of_temporal_lists, make_column_shape_2D, update_emission_pairs_keys
@@ -40,7 +40,6 @@ class BaseClassDCBO(Root):
         args_sem=None,
         manipulative_variables=None,
         change_points: list = None,
-        root_instrument: bool = None,
     ):
         super().__init__(
             graph,
@@ -66,9 +65,7 @@ class BaseClassDCBO(Root):
         )
 
         self.use_mc = use_mc
-
-        # self.sem_variables = [v.split("_")[0] for v in [v for v in self.graph.nodes if v.split("_")[1] == "0"]]
-        self.root_instrument = root_instrument
+        # TODO: put all of this stuff in separate functions
         self.node_children = {node: None for node in self.G.nodes}
         self.node_parents = {node: None for node in self.G.nodes}
         self.emission_pairs = {}
@@ -124,8 +121,8 @@ class BaseClassDCBO(Root):
         # Sometimes the input and output pair order does not match because of NetworkX internal issues,
         # so we need adjust the keys so that they do match.
         self.emission_pairs = update_emission_pairs_keys(self.T, self.node_parents, self.emission_pairs)
-        self.sem_trans_fncs = fit_sem_transition_functions_complex(self.observational_samples, self.transfer_pairs)
-        self.sem_emit_fncs = fit_sem_complex(self.observational_samples, self.emission_pairs)
+        self.sem_trans_fncs = fit_sem_trans_fncs(self.observational_samples, self.transfer_pairs)
+        self.sem_emit_fncs = fit_sem_emit_fncs(self.observational_samples, self.emission_pairs)
 
         self.time_indexed_trans_fncs_inputs = {t: [] for t in range(1, self.T)}
         for t in range(1, self.T):

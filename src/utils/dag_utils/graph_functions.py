@@ -1,9 +1,13 @@
 from graphviz import Source
 from numpy import repeat
 from itertools import cycle, chain
+from networkx import topological_sort, MultiDiGraph
+from typing import Dict, Tuple, List
 
 
-def make_graphical_model(start_time, stop_time, topology, nodes, target_node=None, verbose=False):
+def make_graphical_model(
+    start_time: int, stop_time: int, topology: str, nodes: List[str], target_node: str = None, verbose: bool = False
+) -> str:
     """
     Generic temporal Bayesian network with two types of connections.
 
@@ -106,3 +110,65 @@ def make_graphical_model(start_time, stop_time, topology, nodes, target_node=Non
         return Source(graph)
     else:
         return graph
+
+
+def get_independent_causes(time_slice_vars: List[str], G: MultiDiGraph) -> Dict[str, bool]:
+    """
+    Function to find the "independent causes" in each time-slice. These are variables which have no dependence on the other nodes or on the past. But they are still part of endogenous model.
+
+    Parameters
+    ----------
+    time_slice_vars : list
+        List of variables that belong to the time-slice.
+    G : MultiDiGraph
+        Causal graphical model of networkx type.
+
+    Returns
+    -------
+    Dict[str, bool]
+        Dict which tells which vars are independent causes.
+    """
+
+    independent_causes = {v: False for v in time_slice_vars}
+
+    # Get induced sub-graph from first two time-slices
+    gg = G.subgraph([v + "_0" for v in time_slice_vars] + [v + "_1" for v in time_slice_vars])
+    # Find parents of all nodes in this sub-graph
+    gg_parents = {v: tuple([vv for vv in gg.predecessors(v)]) for v in gg.nodes}
+    # Check which nodes are independent singelton cause variables in both time-slices
+    possible_singletons = [v.split("_")[0] for v in [key for key in gg if not gg_parents[key]]]
+    singleton_causes = [v for v in set(possible_singletons) if possible_singletons.count(v) > 1]
+    #  Indicate found instrument
+    for v in singleton_causes:
+        independent_causes[v] = True
+
+    return independent_causes
+
+
+def get_summary_graph_node_parents(time_slice_vars: List[str], G: MultiDiGraph) -> Tuple[Dict[str, tuple], List[str]]:
+    """
+    FInds the summary graph of the DBN a la page 199 of `Elements of Causal Inference'.
+
+    Parameters
+    ----------
+    time_slice_vars : List[str]
+        List of variables that belong to the time-slice.
+    G : MultiDiGraph
+        Causal graphical model of networkx type.
+
+    Returns
+    -------
+    Tuple[Dict[str, tuple], List[str]]
+        The parents of the nodes in the summary graph and a list of the variables in the time-slice, but causally ordered using topological sort.
+    """
+    gg = G.subgraph([v + "_0" for v in time_slice_vars])
+    #  Causally ordered nodes in the first time-slice
+    causal_order = list(v.split("_")[0] for v in topological_sort(gg))
+    #  See page 199 of 'Elements of Causal Inference' for a reference on summary graphs.
+    summary_graph_node_parents = {
+        v.split("_")[0]: tuple([vv.split("_")[0] for vv in gg.predecessors(v)]) for v in gg.nodes
+    }
+    #  Re-order dict to follow causal order of time-slices
+    summary_graph_node_parents = {k: summary_graph_node_parents[k] for k in causal_order}
+
+    return summary_graph_node_parents, causal_order

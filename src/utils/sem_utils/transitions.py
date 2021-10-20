@@ -1,48 +1,8 @@
 from ..gp_utils import fit_gp
-from numpy import newaxis
-from numpy.core import concatenate, hstack
+from numpy import hstack
 
 
-def fit_sem_transition_functions(observational_samples, n_restart=10) -> dict:
-    # Store function which concern t-1 --> t
-    transition_functions = {k: None for k in observational_samples.keys()}
-    # Total time-steps
-    _, T = observational_samples[list(observational_samples.keys())[0]].shape
-    # Fit transition functions first
-    for var in observational_samples.keys():
-        xx = []
-        yy = []
-        for t1, t2 in zip(range(T - 1), range(1, T)):
-            # Auto-regressive structure
-            xx.append(observational_samples[var][:, t1])
-            yy.append(observational_samples[var][:, t2])
-
-        # Store funcs in dict for later usage
-        transition_functions[var] = fit_gp(
-            x=concatenate(xx, axis=0)[:, newaxis], y=concatenate(yy, axis=0)[:, newaxis], n_restart=n_restart,
-        )
-
-    return transition_functions
-
-
-def update_transition_function(transition_functions, new_observational_samples, total_time_steps_in_graph: int) -> None:
-    for var in transition_functions.keys():
-        xx = []
-        yy = []
-        # Explicitly defining what makes this a transition domain (first-order Markov)
-        for t1, t2 in zip(range(total_time_steps_in_graph - 1), range(1, total_time_steps_in_graph)):
-            # Auto-regressive structure
-            xx.append(new_observational_samples[var][:, t1])
-            yy.append(new_observational_samples[var][:, t2])
-
-        # Re-fit the GP without creating a new object
-        transition_functions[var].set_XY(
-            X=concatenate(xx, axis=0)[:, newaxis], Y=concatenate(yy, axis=0)[:, newaxis],
-        )
-        transition_functions[var].optimise()
-
-
-def fit_sem_transition_functions_complex(observational_samples, transfer_pairs: dict) -> dict:
+def fit_sem_trans_fncs(observational_samples, transfer_pairs: dict) -> dict:
 
     # Store function which concern t-1 --> t
     transition_functions = {}

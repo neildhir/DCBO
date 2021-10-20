@@ -1,53 +1,8 @@
-from itertools import chain
 from numpy.core import hstack
 from ..gp_utils import fit_gp
 
 
-def fit_initial_emission_functions(
-    observational_samples, canonical_exploration_sets, base_target, n_restart: int = 10
-) -> dict:
-    #  The previous target must be a lower-case version of the base_target variable
-    assert base_target.lower() not in chain(*canonical_exploration_sets)
-    # Store functions which concern t = 0
-    initial_emission_functions = {k: None for k in canonical_exploration_sets}
-    yy = observational_samples[base_target][:, 0].reshape(-1, 1)
-    for es in canonical_exploration_sets:
-        if len(es) == 1:
-            initial_emission_functions[es] = fit_gp(
-                x=observational_samples[es[0]][:, 0].reshape(-1, 1), y=yy, n_restart=n_restart,
-            )
-        else:
-            xx = []
-            for iv in es:
-                xx.append(observational_samples[iv][:, 0].reshape(-1, 1))
-            # Fit function
-            initial_emission_functions[es] = fit_gp(x=hstack(xx), y=yy, n_restart=n_restart)
-
-    return initial_emission_functions
-
-
-def fit_sem(observational_samples: dict, time_slice_children: dict, n_restart: int = 10) -> dict:
-    assert isinstance(observational_samples, dict)
-    assert isinstance(time_slice_children, dict)
-    #  This is an ordered list
-    _, T = observational_samples[list(observational_samples.keys())[0]].shape
-    fncs = {t: {key: None for key in time_slice_children.keys()} for t in range(T)}
-    for t in range(T):
-        for key in fncs[t].keys():
-            # XXX: This is hard coded
-            if key == "Z" and t > 0:
-                xx = observational_samples[key][:, t].reshape(-1, 1)
-                yy = observational_samples[time_slice_children[key]][:, t].reshape(-1, 1)
-            else:
-                xx = observational_samples[key][:, t].reshape(-1, 1)
-                yy = observational_samples[time_slice_children[key]][:, t].reshape(-1, 1)
-
-            fncs[t][key] = fit_gp(x=xx, y=yy, n_restart=n_restart)
-
-    return fncs
-
-
-def fit_sem_complex(observational_samples: dict, emission_pairs: dict) -> dict:
+def fit_sem_emit_fncs(observational_samples: dict, emission_pairs: dict) -> dict:
 
     #  This is an ordered list
     timesteps = observational_samples[list(observational_samples.keys())[0]].shape[1]
