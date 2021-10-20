@@ -72,7 +72,7 @@ def auto_sem_hat(
             f = OrderedDict()
             # Assume variables are causally ordered
             for v in summary_graph_node_parents:
-                if not summary_graph_node_parents[v] or independent_causes[v]:
+                if not summary_graph_node_parents[v]:
                     # This is how CBO 'views' the graph.
                     # Always sample from the exogenous model at the root node and independent cause variables -- unless other models are specified
                     f[v] = self._make_white_noise_fnc()
@@ -100,7 +100,10 @@ def auto_sem_hat(
                     """
                     Root node in the time-slice, with time dependence
                   t-1   t
-                    x-->o Node at time t with dependence from time t-1
+                    o-->x Node at time t with dependence from time t-1
+                        |
+                        v
+                        o
                     """
                     assert not summary_graph_node_parents[v], summary_graph_node_parents
                     f[v] = self._make_only_dynamic_transfer_fnc(moment)
@@ -108,7 +111,10 @@ def auto_sem_hat(
                     """
                     Node in the time-slice, with time dependence
                   t-1   t
-                    x-->o Node at time t with dependence from time t-1
+                        o
+                        ^
+                        |
+                    o-->x Node at time t with dependence from time t-1
                     """
                     f[v] = self._make_only_dynamic_transfer_fnc(moment)
                 else:
