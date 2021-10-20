@@ -37,7 +37,7 @@ def auto_sem_hat(
     class SEMHat:
         @staticmethod
         def _make_white_noise_fnc() -> Callable:
-            #  Instrument variable samples the exogenous model which we take to be white noise
+            #  Samples the exogenous model which we take to be white noise
             return lambda: randn()
 
         @staticmethod
@@ -67,10 +67,10 @@ def auto_sem_hat(
             assert moment in [0, 1], moment
             functions = OrderedDict()
             # Assume variables are causally ordered
-            for i, v in enumerate(summary_graph_node_parents):
-                if i == 0 or not summary_graph_node_parents[v]:
+            for v in summary_graph_node_parents:
+                if not summary_graph_node_parents[v] or independent_causes[v]:
                     # This is how CBO 'views' the graph.
-                    # Always sample from the exogenous model at the root node and instrument variables -- unless other models are specified
+                    # Always sample from the exogenous model at the root node and independent cause variables -- unless other models are specified
                     functions[v] = self._make_white_noise_fnc()
                 else:
                     functions[v] = self._make_static_fnc(moment)
@@ -79,11 +79,12 @@ def auto_sem_hat(
         def dynamic(self, moment: int):
             assert moment in [0, 1], moment
             functions = OrderedDict()
-            # Assume variables are causally ordered
+            # Variables are causally ordered
             for i, v in enumerate(summary_graph_node_parents):
                 if i == 0 and independent_causes[v]:
                     """
-                    Instrument variable at the root of the time-slice, without any time dependence
+                    Variable at the root of the time-slice, without any time dependence
+                  t-1   t
                     o   x Node at time t
                         |
                         v
@@ -93,12 +94,14 @@ def auto_sem_hat(
                 elif i == 0 and not independent_causes[v]:
                     """
                     Root node in the time-slice, with time dependence
+                  t-1   t
                     x-->o Node at time t with dependence from time t-1
                     """
                     functions[v] = self._make_only_dynamic_transfer_fnc(moment)
                 elif i > 0 and independent_causes[v] and not summary_graph_node_parents[v]:
                     """
-                    Instrument variable in the time-slice, without any time dependence
+                    Variable in the time-slice, without any time dependence
+
                         o Node at time t
                     x   |
                       \ v
@@ -108,6 +111,7 @@ def auto_sem_hat(
                 elif i > 0 and not independent_causes[v] and not summary_graph_node_parents[v]:
                     """
                     Node in the time-slice, with time dependence
+                  t-1   t
                     x-->o Node at time t with dependence from time t-1
                     """
                     functions[v] = self._make_only_dynamic_transfer_fnc(moment)

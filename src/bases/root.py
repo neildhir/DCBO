@@ -80,10 +80,11 @@ class Root:
         #  Causally ordered nodes in the first time-slice
         self.causal_order = list(v.split("_")[0] for v in topological_sort(gg))
         #  See page 199 of 'Elements of Causal Inference' for a reference on summary graphs.
-        self.summary_graph_node_parents = {
+        summary_graph_node_parents = {
             v.split("_")[0]: tuple([vv.split("_")[0] for vv in gg.predecessors(v)]) for v in gg.nodes
         }
-        assert self.causal_order == list(self.summary_graph_node_parents.keys())
+        # Re-order dict to follow causal order of time-slices
+        self.summary_graph_node_parents = {k: summary_graph_node_parents[k] for k in self.causal_order}
 
         #  Checks what vars in DAG (if any) are independent causes
         self._get_independent_causes()
