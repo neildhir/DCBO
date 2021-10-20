@@ -26,13 +26,16 @@ def auto_sem_hat(
     independent_causes: bool
         Tells the function if the first varible should be treated as an independent cause node (instrument variable) and thus has no incoming edges from the previous time-slice. This is always true for t=0. However, independent causes can appear at any time-slice including on the target node itself.
 
+    Notes
+    -----
+    1. We have _NOT_ covered all network topologies with this function. Beware.
+    2. This function should eventually be passed the full adjacency matrix for the graph.
+
     Returns
     -------
     classmethod
         A SEM estimate found using observational data only; used in finding the optimal intervention set and values for CBO and DCBO.
     """
-
-    # XXX: this function will eventually be passed the full adjacency matrix for the graph.
 
     class SEMHat:
         @staticmethod
@@ -65,59 +68,52 @@ def auto_sem_hat(
 
         def static(self, moment: int):
             assert moment in [0, 1], moment
-            functions = OrderedDict()
+            # SEM functions
+            f = OrderedDict()
             # Assume variables are causally ordered
             for v in summary_graph_node_parents:
                 if not summary_graph_node_parents[v] or independent_causes[v]:
                     # This is how CBO 'views' the graph.
                     # Always sample from the exogenous model at the root node and independent cause variables -- unless other models are specified
-                    functions[v] = self._make_white_noise_fnc()
+                    f[v] = self._make_white_noise_fnc()
                 else:
-                    functions[v] = self._make_static_fnc(moment)
-            return functions
+                    f[v] = self._make_static_fnc(moment)
+            return f
 
         def dynamic(self, moment: int):
             assert moment in [0, 1], moment
-            functions = OrderedDict()
+            # SEM functions
+            f = OrderedDict()
             # Variables are causally ordered
             for i, v in enumerate(summary_graph_node_parents):
                 if i == 0 and independent_causes[v]:
                     """
                     Variable at the root of the time-slice, without any time dependence
                   t-1   t
-                    o   x Node at time t
+                    o   x Node at time t (assumes only _ONE_ independent cause)
                         |
                         v
                         o Child node at time t
                     """
-                    functions[v] = self._make_white_noise_fnc()
+                    f[v] = self._make_white_noise_fnc()
                 elif i == 0 and not independent_causes[v]:
                     """
                     Root node in the time-slice, with time dependence
                   t-1   t
                     x-->o Node at time t with dependence from time t-1
                     """
-                    functions[v] = self._make_only_dynamic_transfer_fnc(moment)
-                elif i > 0 and independent_causes[v] and not summary_graph_node_parents[v]:
-                    """
-                    Variable in the time-slice, without any time dependence
-
-                        o Node at time t
-                    x   |
-                      \ v
-                        o Child node at time t
-                    """
-                    functions[v] = self._make_white_noise_fnc()
-                elif i > 0 and not independent_causes[v] and not summary_graph_node_parents[v]:
+                    assert not summary_graph_node_parents[v], summary_graph_node_parents
+                    f[v] = self._make_only_dynamic_transfer_fnc(moment)
+                elif i > 0 and not summary_graph_node_parents[v]:
                     """
                     Node in the time-slice, with time dependence
                   t-1   t
                     x-->o Node at time t with dependence from time t-1
                     """
-                    functions[v] = self._make_only_dynamic_transfer_fnc(moment)
+                    f[v] = self._make_only_dynamic_transfer_fnc(moment)
                 else:
-                    functions[v] = self._make_dynamic_fnc(moment)
-            return functions
+                    f[v] = self._make_dynamic_fnc(moment)
+            return f
 
     return SEMHat
 

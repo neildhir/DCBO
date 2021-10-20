@@ -149,10 +149,10 @@ class DCBO(BaseClassDCBO):
                     assert int(target_temporal_index) == temporal_index
 
                     new_sem_hat = self.make_sem_hat(
-                        summary_graph_node_parents = self.summary_graph_node_parents,
+                        summary_graph_node_parents=self.summary_graph_node_parents,
                         emission_functions=self.sem_emit_fncs,
                         transition_functions=self.sem_trans_fncs,
-                        root_instrument=self.root_instrument,
+                        independent_causes=self.independent_causes,
                     )
                     self.static_sem = new_sem_hat().static(moment=0)  # for t = 0
                     self.sem = new_sem_hat().dynamic(moment=0)  # for t > 0
