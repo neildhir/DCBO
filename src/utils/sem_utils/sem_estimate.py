@@ -10,7 +10,7 @@ def auto_sem_hat(
     summary_graph_node_parents: dict,
     emission_functions: dict,
     transition_functions: dict = None,
-    instrument_variables: dict = None,
+    independent_causes: dict = None,
 ) -> classmethod:
     """
     This function is used to automatically create the estimates for the edges in a given graph.
@@ -23,8 +23,8 @@ def auto_sem_hat(
         A dictionary of fitted emission functions.
     transition_functions : dict
         A dictionary of fitted transition functions.
-    root_instrument : bool
-        Tells the function if the first varible should be treated as an instrument node and thus has no incoming edges from the previous time-slice. This is always true for t=0.
+    independent_causes: bool
+        Tells the function if the first varible should be treated as an independent cause node (instrument variable) and thus has no incoming edges from the previous time-slice. This is always true for t=0. However, independent causes can appear at any time-slice including on the target node itself.
 
     Returns
     -------
@@ -81,7 +81,7 @@ def auto_sem_hat(
             functions = OrderedDict()
             # Assume variables are causally ordered
             for i, v in enumerate(summary_graph_node_parents):
-                if i == 0 and instrument_variables[v]:
+                if i == 0 and independent_causes[v]:
                     """
                     Instrument variable at the root of the time-slice, without any time dependence
                     o   x Node at time t
@@ -90,13 +90,13 @@ def auto_sem_hat(
                         o Child node at time t
                     """
                     functions[v] = self._make_white_noise_fnc()
-                elif i == 0 and not instrument_variables[v]:
+                elif i == 0 and not independent_causes[v]:
                     """
                     Root node in the time-slice, with time dependence
                     x-->o Node at time t with dependence from time t-1
                     """
                     functions[v] = self._make_only_dynamic_transfer_fnc(moment)
-                elif i > 0 and instrument_variables[v] and not summary_graph_node_parents[v]:
+                elif i > 0 and independent_causes[v] and not summary_graph_node_parents[v]:
                     """
                     Instrument variable in the time-slice, without any time dependence
                         o Node at time t
@@ -105,7 +105,7 @@ def auto_sem_hat(
                         o Child node at time t
                     """
                     functions[v] = self._make_white_noise_fnc()
-                elif i > 0 and not instrument_variables[v] and not summary_graph_node_parents[v]:
+                elif i > 0 and not independent_causes[v] and not summary_graph_node_parents[v]:
                     """
                     Node in the time-slice, with time dependence
                     x-->o Node at time t with dependence from time t-1

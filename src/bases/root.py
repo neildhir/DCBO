@@ -85,8 +85,8 @@ class Root:
         }
         assert self.causal_order == list(self.summary_graph_node_parents.keys())
 
-        #  Checks what vars in DAG (if any) are instrument variables
-        self._get_instrument_variables()
+        #  Checks what vars in DAG (if any) are independent causes
+        self._get_independent_causes()
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task
@@ -228,21 +228,21 @@ class Root:
         if self.estimate_sem:
             self.assigned_blanket_hat = deepcopy(self.optimal_blanket)
 
-    def _get_instrument_variables(self):
+    def _get_independent_causes(self):
 
         time_slice_vars = self.observational_samples.keys()
-        self.instrument_variables = {v: False for v in time_slice_vars}
+        self.independent_causes = {v: False for v in time_slice_vars}
 
         # Get induced sub-graph from first two time-slices
         gg = self.G.subgraph([v + "_0" for v in time_slice_vars] + [v + "_1" for v in time_slice_vars])
         # Find parents of all nodes in this sub-graph
         gg_parents = {v: tuple([vv for vv in gg.predecessors(v)]) for v in gg.nodes}
-        # Check which nodes are instrument variables in both time-slices
-        possible_instruments = [v.split("_")[0] for v in [key for key in gg if not gg_parents[key]]]
-        instruments = [v for v in set(possible_instruments) if possible_instruments.count(v) > 1]
+        # Check which nodes are independent singelton cause variables in both time-slices
+        possible_singletons = [v.split("_")[0] for v in [key for key in gg if not gg_parents[key]]]
+        singleton_causes = [v for v in set(possible_singletons) if possible_singletons.count(v) > 1]
         #  Indicate found instrument
-        for v in instruments:
-            self.instrument_variables[v] = True
+        for v in singleton_causes:
+            self.independent_causes[v] = True
 
     def _update_opt_params(self, it: int, temporal_index: int, best_es: tuple) -> None:
 
