@@ -1,5 +1,11 @@
+from copy import deepcopy
+from itertools import combinations
+from typing import Dict, Tuple
+from networkx import MultiDiGraph
 from numpy.core import hstack
+
 from ..gp_utils import fit_gp
+from ..utilities import update_emission_pairs_keys
 
 
 def fit_sem_emit_fncs(observational_samples: dict, emission_pairs: dict) -> dict:
@@ -40,3 +46,51 @@ def fit_sem_emit_fncs(observational_samples: dict, emission_pairs: dict) -> dict
 
     # To remove any None values
     return {t: {k: v for k, v in emit_fncs[t].items() if v is not None} for t in range(timesteps)}
+
+
+def get_emissions_input_output_pairs(
+    T: int, G: MultiDiGraph
+) -> Tuple[Dict[str, tuple], Dict[str, tuple], Dict[str, tuple]]:
+
+    node_children = {node: None for node in G.nodes}
+    node_parents = {node: None for node in G.nodes}
+    emission_pairs = {}
+
+    # Children of all nodes
+    for node in G.nodes:
+        node_children[node] = list(G.successors(node))
+
+    #  Parents of all nodes
+    for node in G.nodes:
+        node_parents[node] = tuple(G.predecessors(node))
+
+    emissions = {t: [] for t in range(T)}
+    for e in G.edges:
+        _, inn_time = e[0].split("_")
+        _, out_time = e[1].split("_")
+        # Emission edge
+        if out_time == inn_time:
+            emissions[int(out_time)].append((e[0], e[1]))
+
+    new_emissions = deepcopy(emissions)
+    emissions = emissions
+    for t in range(T):
+        for a, b in combinations(emissions[t], 2):
+            if a[1] == b[1]:
+                new_emissions[t].append(((a[0], b[0]), a[1]))
+                cond = [v for v in list(G.predecessors(b[0])) if v.split("_")[1] == str(t)]
+                if len(cond) != 0 and cond[0] == a[0]:
+                    # Remove from list
+                    new_emissions[t].remove(a)
+
+    for t in range(T):
+        for pair in new_emissions[t]:
+            if isinstance(pair[0], tuple):
+                emission_pairs[pair[0]] = pair[1]
+            else:
+                emission_pairs[(pair[0],)] = pair[1]
+
+    # Sometimes the input and output pair order does not match because of NetworkX internal issues, so we need adjust the keys so that they do match.
+    emission_pairs = update_emission_pairs_keys(T, node_parents, emission_pairs)
+
+    return node_children, node_parents, emission_pairs

@@ -2,12 +2,12 @@ from graphviz import Source
 from numpy import repeat
 from itertools import cycle, chain
 from networkx import topological_sort, MultiDiGraph
-from typing import Dict, Tuple, List
+from typing import Dict, Tuple, List, Union
 
 
 def make_graphical_model(
     start_time: int, stop_time: int, topology: str, nodes: List[str], target_node: str = None, verbose: bool = False
-) -> str:
+) -> Union[MultiDiGraph, str]:
     """
     Generic temporal Bayesian network with two types of connections.
 

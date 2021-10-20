@@ -72,7 +72,7 @@ def auto_sem_hat(
             f = OrderedDict()
             # Assume variables are causally ordered
             for v in summary_graph_node_parents:
-                if not summary_graph_node_parents[v]:
+                if not summary_graph_node_parents[v] or independent_causes[v]:
                     # This is how CBO 'views' the graph.
                     # Always sample from the exogenous model at the root node and independent cause variables -- unless other models are specified
                     f[v] = self._make_white_noise_fnc()
@@ -81,7 +81,6 @@ def auto_sem_hat(
             return f
 
         def dynamic(self, moment: int):
-            # TODO: put back the functions that I removed
             assert moment in [0, 1], moment
             # SEM functions
             f = OrderedDict()

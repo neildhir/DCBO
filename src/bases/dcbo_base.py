@@ -1,20 +1,19 @@
 from copy import deepcopy
-from itertools import combinations
 
 import numpy as np
 from src.utils.gp_utils import fit_gp, sequential_sample_from_complex_model_hat
-from src.utils.sem_utils.emissions import fit_sem_emit_fncs
-from src.utils.sem_utils.transitions import fit_sem_trans_fncs
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs, get_emissions_input_output_pairs
+from src.utils.sem_utils.transitions import fit_sem_trans_fncs, get_transition_input_output_pairs
 from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
-from src.utils.utilities import convert_to_dict_of_temporal_lists, make_column_shape_2D, update_emission_pairs_keys
+from src.utils.utilities import convert_to_dict_of_temporal_lists, make_column_shape_2D
 
 from .root import Root
 
 
 class BaseClassDCBO(Root):
     """
-    Base class for the DCBO method.
+    Base class for the DCBO.
     """
 
     def __init__(
@@ -24,12 +23,12 @@ class BaseClassDCBO(Root):
         make_sem_estimator: callable,
         observational_samples: dict,
         intervention_domain: dict,
-        interventional_samples: dict = None,  # Interventional data collected for specific intervention sets
+        interventional_samples: dict = None,
         exploration_sets: list = None,
         estimate_sem: bool = False,
         base_target_variable: str = "Y",
         task: str = "min",
-        cost_type: int = 1,  # There are multiple options here
+        cost_type: int = 1,
         number_of_trials=10,
         ground_truth=None,
         n_restart: int = 1,
@@ -65,62 +64,10 @@ class BaseClassDCBO(Root):
         )
 
         self.use_mc = use_mc
-        # TODO: put all of this stuff in separate functions
-        self.node_children = {node: None for node in self.G.nodes}
-        self.node_parents = {node: None for node in self.G.nodes}
-        self.emission_pairs = {}
 
-        # Children of all nodes
-        for node in self.G.nodes:
-            self.node_children[node] = list(self.G.successors(node))
+        self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
+        self.transfer_pairs = get_transition_input_output_pairs(self.node_parents)
 
-        #  Parents of all nodes
-        for node in self.G.nodes:
-            self.node_parents[node] = tuple(self.G.predecessors(node))
-
-        emissions = {t: [] for t in range(self.T)}
-        for e in self.G.edges:
-            _, inn_time = e[0].split("_")
-            _, out_time = e[1].split("_")
-            # Emission edge
-            if out_time == inn_time:
-                emissions[int(out_time)].append((e[0], e[1]))
-
-        new_emissions = deepcopy(emissions)
-        self.emissions = emissions
-        for t in range(self.T):
-            for a, b in combinations(emissions[t], 2):
-                if a[1] == b[1]:
-                    new_emissions[t].append(((a[0], b[0]), a[1]))
-                    cond = [v for v in list(self.G.predecessors(b[0])) if v.split("_")[1] == str(t)]
-                    if len(cond) != 0 and cond[0] == a[0]:
-                        # Remove from list
-                        new_emissions[t].remove(a)
-
-        self.emission_pairs = {}
-
-        for t in range(self.T):
-            for pair in new_emissions[t]:
-                if isinstance(pair[0], tuple):
-                    self.emission_pairs[pair[0]] = pair[1]
-                else:
-                    self.emission_pairs[(pair[0],)] = pair[1]
-
-        #  Find all inputs and outputs for transition functions
-        transfer_pairs = {}
-        for node in self.node_parents:
-            _, time = node.split("_")
-            if self.node_parents[node] and time > "0":
-                tmp = [parent for parent in self.node_parents[node] if parent.split("_")[1] != time]
-                assert len(tmp) != 0, (node, self.node_parents[node], tmp)
-                transfer_pairs[node] = tmp
-
-        # Flip keys and values to get explicit input-output order
-        self.transfer_pairs = dict((tuple(v), k) for k, v in transfer_pairs.items())
-
-        # Sometimes the input and output pair order does not match because of NetworkX internal issues,
-        # so we need adjust the keys so that they do match.
-        self.emission_pairs = update_emission_pairs_keys(self.T, self.node_parents, self.emission_pairs)
         self.sem_trans_fncs = fit_sem_trans_fncs(self.observational_samples, self.transfer_pairs)
         self.sem_emit_fncs = fit_sem_emit_fncs(self.observational_samples, self.emission_pairs)
 
