@@ -141,11 +141,3 @@ def make_sequential_intervention_dictionary(graph):
     variables = sorted(set([s for s in G if s.isalpha()]))
     time_series_length = max([int(s) for s in G if s.isdigit()]) + 1
     return {v: time_series_length * [None] for v in variables}, time_series_length
-
-
-def make_intervention_observation_log_blanket(graph, canonical_target_var="Y"):
-    G = "".join(graph.nodes)
-    variables = sorted(set([s for s in G if s.isalpha() and s != canonical_target_var]))
-    time_series_length = max([int(s) for s in G if s.isdigit()]) + 1
-    exploration_sets = powerset(variables)
-    return {v: time_series_length * [None] for v in exploration_sets}
