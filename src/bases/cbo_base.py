@@ -1,12 +1,11 @@
 from copy import deepcopy
-from itertools import combinations
 from random import choice
 from typing import Callable
 
-from networkx.algorithms.dag import topological_sort
 from networkx.classes.multidigraph import MultiDiGraph
 from src.bayes_opt.cost_functions import define_costs
-from src.utils.sem_utils.emissions import fit_sem_emit_fncs
+from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs, get_emissions_input_output_pairs
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
@@ -18,7 +17,6 @@ from src.utils.utilities import (
     initialise_DCBO_parameters_and_objects_filtering,
     initialise_global_outcome_dict_new,
     initialise_optimal_intervention_level_list,
-    update_emission_pairs_keys,
 )
 
 
@@ -64,6 +62,9 @@ class BaseClassCBO:
         self.true_sem = true_sem.dynamic()  # for t > 0
         self.make_sem_hat = make_sem_hat
 
+        # XXX: assumes that we have the same initial obs count per variable. Not true for most real problems.
+        self.number_of_trials = number_of_trials
+
         # Make sure data has been normalised/centred
         self.observational_samples = observational_samples
 
@@ -75,66 +76,17 @@ class BaseClassCBO:
         # Total time-steps and sample count per time-step
         _, T = observational_samples[list(observational_samples.keys())[0]].shape
         assert isinstance(G, MultiDiGraph)
-        self.graph = G
-        self.sem_variables = [v.split("_")[0] for v in [v for v in G.nodes if v.split("_")[1] == "0"]]
-        self.node_children = {node: None for node in self.graph.nodes}
-        self.node_parents = {node: None for node in self.graph.nodes}
-        self.emission_pairs = {}
+        self.G = G
 
-        # Children of all nodes
-        for node in self.graph.nodes:
-            self.node_children[node] = list(self.graph.successors(node))
-
-        #  Parents of all nodes
-        for node in self.graph.nodes:
-            self.node_parents[node] = tuple(self.graph.predecessors(node))
-
-        emissions = {t: [] for t in range(T)}
-        for e in G.edges:
-            _, inn_time = e[0].split("_")
-            _, out_time = e[1].split("_")
-            # Emission edgee
-            if out_time == inn_time:
-                emissions[int(out_time)].append((e[0], e[1]))
-
-        new_emissions = deepcopy(emissions)
-        self.emissions = emissions
-        for t in range(T):
-            for a, b in combinations(emissions[t], 2):
-                if a[1] == b[1]:
-                    new_emissions[t].append(((a[0], b[0]), a[1]))
-                    cond = [v for v in list(G.predecessors(b[0])) if v.split("_")[1] == str(t)]
-                    if len(cond) != 0 and cond[0] == a[0]:
-                        # Remove from list
-                        new_emissions[t].remove(a)
-
-        self.emission_pairs = {}
-        for t in range(T):
-            for pair in new_emissions[t]:
-                if isinstance(pair[0], tuple):
-                    self.emission_pairs[pair[0]] = pair[1]
-                else:
-                    self.emission_pairs[(pair[0],)] = pair[1]
-
-        # Sometimes the input and output pair order does not match because of NetworkX internal issues,
-        # so we need adjust the keys so that they do match.
-        self.emission_pairs = update_emission_pairs_keys(T, self.node_parents, self.emission_pairs)
-
+        self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
         self.estimate_sem = estimate_sem
         self.sem_emit_fncs = fit_sem_emit_fncs(observational_samples, self.emission_pairs)
 
-        # XXX: assumes that we have the same initial obs count per variable. Not true for most real problems.
-        self.number_of_trials = number_of_trials
-
         #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
-        gg = self.G.subgraph([v + "_0" for v in observational_samples.keys()])
-        #  Causally ordered nodes in the first time-slice
-        self.causal_order = list(v.split("_")[0] for v in topological_sort(gg))
-        #  See page 199 of 'Elements of Causal Inference' for a reference on summary graphs.
-        self.summary_graph_node_parents = {
-            v.split("_")[0]: tuple([vv.split("_")[0] for vv in gg.predecessors(v)]) for v in gg.nodes
-        }
-        assert self.causal_order == list(self.summary_graph_node_parents.keys())
+        time_slice_vars = observational_samples.keys()
+        self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
+        #  Checks what vars in DAG (if any) are independent causes
+        self.independent_causes = get_independent_causes(time_slice_vars, G)
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task
@@ -147,9 +99,9 @@ class BaseClassCBO:
         self.index_name = 0
 
         # Instantiate blanket that will form final solution
-        (self.optimal_blanket, self.total_timesteps,) = make_sequential_intervention_dictionary(self.graph)
+        (self.optimal_blanket, self.total_timesteps,) = make_sequential_intervention_dictionary(self.G)
         self.assigned_blanket = deepcopy(self.optimal_blanket)
-        self.empty_intervention_blanket, _ = make_sequential_intervention_dictionary(self.graph)
+        self.empty_intervention_blanket, _ = make_sequential_intervention_dictionary(self.G)
 
         # Canonical manipulative variables
         if manipulative_variables is None:
@@ -165,7 +117,7 @@ class BaseClassCBO:
         self.exploration_sets = exploration_sets
 
         # Extract all target variables from the causal graphical model
-        self.all_target_variables = list(filter(lambda k: self.base_target_variable in k, self.graph.nodes))
+        self.all_target_variables = list(filter(lambda k: self.base_target_variable in k, self.G.nodes))
 
         # Get the interventional grids
         self.interventional_grids = get_interventional_grids(
@@ -244,7 +196,7 @@ class BaseClassCBO:
         for temporal_index in range(T):
             for es in self.exploration_sets:
                 self.target_functions[temporal_index][es] = evaluate_target_function(
-                    self.true_initial_sem, self.true_sem, self.graph, es, self.observational_samples.keys(), T,
+                    self.true_initial_sem, self.true_sem, self.G, es, self.observational_samples.keys(), T,
                 )
 
         # Parameter space for optimisation

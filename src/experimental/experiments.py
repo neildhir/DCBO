@@ -1,6 +1,7 @@
 import pickle
 from copy import deepcopy
 from random import sample
+from pandas import DataFrame, read_csv
 
 from matplotlib import pyplot as plt
 import numpy as np
@@ -517,3 +518,72 @@ def optimise_one_time_step(
         X_I_train_list,
         Y_I_train_list,
     )
+
+
+def create_plankton_dataset(start: int, end: int) -> dict:
+    """Function to create dataset for plankton experiment.
+
+    Uses data from experiments C1 to C4 from [1].
+
+    A series of ten chemostat experiments was performed, constituting a total of 1,948 measurement days (corresponding to 5.3 years of measurement) and covering 3 scenarios.
+
+    Constant environmental conditions (C1–C7, 1,428 measurement days). This scenario consisted of 4 trials with the alga M. minutum (C1–C4) which is what we use in these experiments. All data is lives in `data/plankton` and is freely available online.
+
+    [1] Blasius B, Rudolf L, Weithoff G, Gaedke U, Fussmann G.F. Long-term cyclic persistence in an experimental predator-prey system. Nature (2019).
+
+    Parameters
+    ----------
+    start : int
+        Start time-index
+    end : int
+        End time-index
+
+    Returns
+    -------
+    dict
+        State-variables as the keys with data as a ndarray
+    """
+
+    #  Constants from paper
+    v_algal = 28e-9  # nitrogen content per algal cell
+    v_Brachionus = 0.57 * 1e-3  # nitrogen content per adult female Brachionus
+    beta = 5
+    data = DataFrame()
+
+    ds = []
+
+    files = ["C1", "C2", "C3", "C4"]  # , "C6", "C7"]
+    for file in files:
+        df = read_csv("../data/plankton/{}.csv".format(file))
+
+        # Impute missing values
+        df.interpolate(method="cubic", inplace=True)  #  There are better imputation methods
+
+        data["M"] = df[" external medium (mu mol N / l)"]
+        data["N"] = df[" algae (10^6 cells/ml)"] * 1e6 * 1000 * v_algal
+        data["P"] = df[" rotifers (animals/ml)"] * 1000 * v_Brachionus
+        data["D"] = df[" dead animals (per ml)"] * 1000 * v_Brachionus
+        data["E"] = df[" eggs (per ml)"] * 1000 * v_Brachionus
+        data["B"] = df.apply(
+            lambda row: beta * row[" eggs (per ml)"] / row[" egg-ratio"] if row[" egg-ratio"] > 0 else 0.0, axis=1
+        )
+
+        # Derivative state variables (function of other state variables)
+        data["A"] = data.apply(lambda row: (row.B * 0.5) * 1000 * v_Brachionus, axis=1)
+        data["J"] = data.apply(lambda row: (row.B / (2 * beta)) * 1000 * v_Brachionus, axis=1)
+
+        # Replace NaN values at t=0 with 0.0
+        data.fillna(value=0.0, inplace=True)
+        assert data.isnull().sum().sum() == 0, (file, df.isnull().sum())
+
+        tmp_dict = data[["M", "N", "P", "J", "A", "E", "D"]].iloc[start:end, :].to_dict("list")
+        # print(tmp_dict)
+        ds.append({item[0]: np.array(item[1]).reshape(1, -1) for item in tmp_dict.items()})
+
+    # Merge all observations from all datasets
+    d = {}
+    for k in tmp_dict.keys():
+        d[k] = np.concatenate(list(d[k] for d in ds), axis=0)
+
+    print("Units of all observation variables is (mu mol N / L).")
+    return d

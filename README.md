@@ -43,6 +43,15 @@ conda or pip
 
 ## Demo and tutorials
 
+```
+    Optimisation options:
+
+    1) DCBO         : (causal_prior == True, dynamic == True)
+    2) Dynamic BO   : (causal_prior == False, dynamic == True)
+    3) CBO          : (causal_prior == True, dynamic == False)
+    4) BO           : (causal_prior == False, dynamic == False)
+```
+
 - [stat_scm.ipynb](notebooks/stat_scm.ipynb) walks through the basic steps required to run all methods (BO, ABO, CBO and DCBO) on the example SCM shown in figure 1 of the paper.
 - [nonstat_scm.ipynb](notebooks/stat_scm.ipynb) demonstrates how to run the methods on the SCM with the DAG shown in figure 3(c) of the paper, but over multiple recplicates, to allow for confidence bounds over the results.
 
