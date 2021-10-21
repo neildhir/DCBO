@@ -4,9 +4,8 @@ import numpy as np
 from src.utils.gp_utils import fit_gp, sequential_sample_from_complex_model_hat
 from src.utils.sem_utils.emissions import fit_sem_emit_fncs
 from src.utils.sem_utils.transitions import fit_sem_trans_fncs, get_transition_input_output_pairs
-from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
-from src.utils.utilities import convert_to_dict_of_temporal_lists, make_column_shape_2D
+from src.utils.utilities import make_column_shape_2D
 
 from .root import Root
 
@@ -283,71 +282,6 @@ class BaseClassDCBO(Root):
         self._update_sem_emit_fncs(temporal_index, temporal_index_data=temporal_index_data)
         self._update_sem_transmission_functions(temporal_index, temporal_index_data=temporal_index_data)
 
-    def _update_observational_data(self, temporal_index):
-        if temporal_index > 0:
-            if self.online:
-                if isinstance(self.n_obs_t, list):
-                    local_n_t = self.n_obs_t[temporal_index]
-                else:
-                    local_n_t = self.n_obs_t
-                assert local_n_t is not None
-
-                # Sample new data
-                set_observational_samples = sequentially_sample_model(
-                    static_sem=self.true_initial_sem,
-                    dynamic_sem=self.true_sem,
-                    total_timesteps=temporal_index + 1,
-                    sample_count=local_n_t,
-                    use_sem_estimate=False,
-                    interventions=self.assigned_blanket,
-                )
-
-                # Reshape data
-                set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
-
-                for var in self.observational_samples.keys():
-                    self.observational_samples[var][temporal_index] = set_observational_samples[var][temporal_index]
-            else:
-                if isinstance(self.n_obs_t, list):
-                    local_n_obs = self.n_obs_t[temporal_index]
-
-                    n_stored_observations = len(
-                        self.observational_samples[list(self.observational_samples.keys())[0]][temporal_index]
-                    )
-
-                    if self.online is False and local_n_obs != n_stored_observations:
-                        # We already have the same number of observations stored
-                        set_observational_samples = sequentially_sample_model(
-                            static_sem=self.true_initial_sem,
-                            dynamic_sem=self.true_sem,
-                            total_timesteps=temporal_index + 1,
-                            sample_count=local_n_obs,
-                            use_sem_estimate=False,
-                        )
-                        # Reshape data
-                        set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
-
-                        for var in self.observational_samples.keys():
-                            self.observational_samples[var][temporal_index] = set_observational_samples[var][
-                                temporal_index
-                            ]
-
-    def _get_assigned_blanket(self, temporal_index):
-        if temporal_index > 0:
-            if self.optimal_assigned_blankets is not None:
-                assigned_blanket = self.optimal_assigned_blankets[temporal_index]
-            else:
-                assigned_blanket = self.assigned_blanket_hat
-        else:
-            assigned_blanket = self.assigned_blanket_hat
-        return assigned_blanket
-
-    def _safe_optimization(self, temporal_index, exploration_set, bound_var=1e-02, bound_len=20.0):
-        if self.bo_model[temporal_index][exploration_set].model.kern.variance[0] < bound_var:
-            self.bo_model[temporal_index][exploration_set].model.kern.variance[0] = 1.0
-
-        if self.bo_model[temporal_index][exploration_set].model.kern.lengthscale[0] > bound_len:
-            self.bo_model[temporal_index][exploration_set].model.kern.lengthscale[0] = 1.0
 
     def _get_interventional_hp(self, temporal_index, exploration_set, prior_var, prior_lengthscale):
         if temporal_index > 0 and self.transfer_hp_i:
