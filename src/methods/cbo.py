@@ -17,6 +17,7 @@ from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
 from src.utils.gp_utils import fit_gp, update_sufficient_statistics, update_sufficient_statistics_hat
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs
 from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.utilities import (
     assign_blanket,
@@ -92,6 +93,11 @@ class CBO(BaseClassCBO):
         self.seed = seed
         self.sample_anchor_points = sample_anchor_points
         self.seed_anchor_points = seed_anchor_points
+        self.sem_emit_fncs = fit_sem_emit_fncs(self.observational_samples, self.emission_pairs)
+        # Convert observational samples to dict of temporal lists.
+        # We do this because at each time-index we may have a different number of samples.
+        # Because of this, samples need to be stored one lists per time-step.
+        self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
 
     def run_optimization(self):
 

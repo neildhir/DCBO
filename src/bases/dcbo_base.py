@@ -2,7 +2,7 @@ from copy import deepcopy
 
 import numpy as np
 from src.utils.gp_utils import fit_gp, sequential_sample_from_complex_model_hat
-from src.utils.sem_utils.emissions import fit_sem_emit_fncs, get_emissions_input_output_pairs
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs
 from src.utils.sem_utils.transitions import fit_sem_trans_fncs, get_transition_input_output_pairs
 from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
@@ -18,7 +18,7 @@ class BaseClassDCBO(Root):
 
     def __init__(
         self,
-        graph: str,
+        G: str,
         sem: classmethod,
         make_sem_estimator: callable,
         observational_samples: dict,
@@ -40,34 +40,32 @@ class BaseClassDCBO(Root):
         manipulative_variables=None,
         change_points: list = None,
     ):
-        super().__init__(
-            graph,
-            sem,
-            make_sem_estimator,
-            observational_samples,
-            intervention_domain,
-            interventional_samples,
-            exploration_sets,
-            estimate_sem,
-            base_target_variable,
-            task,
-            cost_type,
-            number_of_trials,
-            ground_truth,
-            n_restart,
-            debug_mode,
-            online,
-            num_anchor_points,
-            args_sem,
-            manipulative_variables,
-            change_points,
-        )
+        root_args = {
+            "G": G,
+            "sem": sem,
+            "make_sem_estimator": make_sem_estimator,
+            "observational_samples": observational_samples,
+            "intervention_domain": intervention_domain,
+            "intervention_samples": interventional_samples,
+            "exploration_sets": exploration_sets,
+            "estimate_sem": estimate_sem,
+            "base_target_variable": base_target_variable,
+            "task": task,
+            "cost_type": cost_type,
+            "use_mc": use_mc,
+            "number_of_trials": number_of_trials,
+            "ground_truth": ground_truth,
+            "n_restart": n_restart,
+            "debug_mode": debug_mode,
+            "online": online,
+            "num_anchor_points": num_anchor_points,
+            "args_sem": args_sem,
+            "manipulative_variables": manipulative_variables,
+            "change_points": change_points,
+        }
+        super().__init__(**root_args)
 
-        self.use_mc = use_mc
-
-        self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
         self.transfer_pairs = get_transition_input_output_pairs(self.node_parents)
-
         self.sem_trans_fncs = fit_sem_trans_fncs(self.observational_samples, self.transfer_pairs)
         self.sem_emit_fncs = fit_sem_emit_fncs(self.observational_samples, self.emission_pairs)
 
@@ -77,11 +75,6 @@ class BaseClassDCBO(Root):
                 tt = int(self.transfer_pairs[key].split("_")[1])
                 if t == tt:
                     self.time_indexed_trans_fncs_inputs[t].append(key)
-
-        # Convert observational samples to dict of temporal lists.
-        # We do this because at each time-index we may have a different number of samples.
-        # Because of this, samples need to be stored one lists per time-step.
-        self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
 
     def _update_sem_emit_fncs(self, temporal_index: int, temporal_index_data=None) -> None:
 

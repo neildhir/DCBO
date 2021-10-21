@@ -5,14 +5,13 @@ from typing import Callable
 from networkx.classes.multidigraph import MultiDiGraph
 from src.bayes_opt.cost_functions import define_costs
 from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
-from src.utils.sem_utils.emissions import fit_sem_emit_fncs, get_emissions_input_output_pairs
+from src.utils.sem_utils.emissions import get_emissions_input_output_pairs
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
     make_sequential_intervention_dictionary,
 )
 from src.utils.utilities import (
-    convert_to_dict_of_temporal_lists,
     create_intervention_exploration_domain,
     initialise_DCBO_parameters_and_objects_filtering,
     initialise_global_outcome_dict_new,
@@ -49,7 +48,6 @@ class BaseClassCBO:
         manipulative_variables=None,
         change_points: list = None,
     ):
-        self.debug_mode = debug_mode
         if args_sem is None and change_points is None:
             true_sem = sem()
         elif args_sem and change_points is None:
@@ -62,12 +60,9 @@ class BaseClassCBO:
         self.true_sem = true_sem.dynamic()  # for t > 0
         self.make_sem_hat = make_sem_hat
 
-        # XXX: assumes that we have the same initial obs count per variable. Not true for most real problems.
-        self.number_of_trials = number_of_trials
-
-        # Make sure data has been normalised/centred
-        self.observational_samples = observational_samples
-
+        assert isinstance(G, MultiDiGraph)
+        self.G = G
+        self.debug_mode = debug_mode
         # Number of optimization restart for GPs
         self.n_restart = n_restart
         self.online = online
@@ -75,18 +70,18 @@ class BaseClassCBO:
 
         # Total time-steps and sample count per time-step
         _, T = observational_samples[list(observational_samples.keys())[0]].shape
-        assert isinstance(G, MultiDiGraph)
-        self.G = G
-
-        self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
-        self.estimate_sem = estimate_sem
-        self.sem_emit_fncs = fit_sem_emit_fncs(observational_samples, self.emission_pairs)
+        self.observational_samples = observational_samples
+        self.base_target_variable = base_target_variable
+        self.index_name = 0
+        self.number_of_trials = number_of_trials
 
         #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
         time_slice_vars = observational_samples.keys()
         self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
         #  Checks what vars in DAG (if any) are independent causes
         self.independent_causes = get_independent_causes(time_slice_vars, G)
+
+        self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task
@@ -95,8 +90,6 @@ class BaseClassCBO:
             self.blank_val = 1e7  # Positive infinity
         elif task == "max":
             self.blank_val = -1e7  # Negative infinity
-        self.base_target_variable = base_target_variable  # This has to be reflected in the CGM
-        self.index_name = 0
 
         # Instantiate blanket that will form final solution
         (self.optimal_blanket, self.total_timesteps,) = make_sequential_intervention_dictionary(self.G)
@@ -142,6 +135,7 @@ class BaseClassCBO:
 
         # For logging
         self.sequence_of_interventions_during_trials = [[] for _ in range(self.total_timesteps)]
+
         # Initial optimal solutions
         if interventional_samples:
             # Provide initial interventional data
@@ -210,12 +204,9 @@ class BaseClassCBO:
         self.per_trial_cost = [[] for _ in range(self.total_timesteps)]
         self.optimal_intervention_sets = [None for _ in range(self.total_timesteps)]
 
-        # Convert observational samples to dict of temporal lists.
-        # We do this because at each time-index we may have a different number of samples.
-        # Because of this, samples need to be stored one lists per time-step.
-        self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
         # Acquisition function specifics
         self.y_acquired = {es: None for es in self.exploration_sets}
         self.corresponding_x = deepcopy(self.y_acquired)
+        self.estimate_sem = estimate_sem
         if self.estimate_sem:
             self.assigned_blanket_hat = deepcopy(self.optimal_blanket)

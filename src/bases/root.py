@@ -9,6 +9,7 @@ from numpy.core.multiarray import ndarray
 from numpy.core.numeric import nan
 from src.bayes_opt.cost_functions import define_costs
 from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
+from src.utils.sem_utils.emissions import get_emissions_input_output_pairs
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
@@ -42,6 +43,7 @@ class Root:
         base_target_variable: str = "Y",
         task: str = "min",
         cost_type: int = 1,  # There are multiple options here
+        use_mc: bool = False,
         number_of_trials=10,
         ground_truth: ndarray = None,
         n_restart: int = 1,
@@ -70,16 +72,22 @@ class Root:
         # Number of optimization restart for GPs
         self.n_restart = n_restart
         self.online = online
+        self.use_mc = use_mc
 
         # Total time-steps and sample count per time-step
         _, self.T = observational_samples[list(observational_samples.keys())[0]].shape
         self.observational_samples = observational_samples
+        self.base_target_variable = base_target_variable  # This has to be reflected in the CGM
+        self.index_name = 0
+        self.number_of_trials = number_of_trials
 
         #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
         time_slice_vars = observational_samples.keys()
         self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
         #  Checks what vars in DAG (if any) are independent causes
         self.independent_causes = get_independent_causes(time_slice_vars, G)
+
+        self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task
@@ -88,11 +96,6 @@ class Root:
             self.blank_val = 1e7  # Positive infinity
         elif task == "max":
             self.blank_val = -1e7  # Negative infinity
-        self.base_target_variable = base_target_variable  # This has to be reflected in the CGM
-        self.index_name = 0
-
-        # XXX: assumes that we have the same initial obs count per variable. Not true for most real problems.
-        self.number_of_trials = number_of_trials
 
         # Instantiate blanket that will form final solution
         (self.optimal_blanket, self.total_timesteps,) = make_sequential_intervention_dictionary(self.G)
@@ -112,7 +115,6 @@ class Root:
             self.manipulative_variables = manipulative_variables
 
         self.interventional_variable_limits = intervention_domain
-
         assert self.manipulative_variables == list(intervention_domain.keys())
         assert isinstance(exploration_sets, list)
         self.exploration_sets = exploration_sets
@@ -311,7 +313,6 @@ class Root:
         self.interventional_data_y[temporal_index][best_es] = data_y
 
     def _plot_surrogate_model(self, temporal_index):
-        # TODO Extend this function to plot multivariate interventions
         # Plot model
         for es in self.exploration_sets:
             if len(es) == 1:

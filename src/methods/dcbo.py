@@ -11,7 +11,7 @@ from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
 from src.utils.gp_utils import update_sufficient_statistics, update_sufficient_statistics_hat
-from src.utils.utilities import assign_blanket, assign_blanket_hat, check_blanket, make_column_shape_2D
+from src.utils.utilities import assign_blanket, assign_blanket_hat, check_blanket, convert_to_dict_of_temporal_lists, make_column_shape_2D
 from tqdm import trange
 
 
@@ -86,6 +86,10 @@ class DCBO(BaseClassDCBO):
         self.seed = seed
         self.sample_anchor_points = sample_anchor_points
         self.seed_anchor_points = seed_anchor_points
+        # Convert observational samples to dict of temporal lists.
+        # We do this because at each time-index we may have a different number of samples.
+        # Because of this, samples need to be stored one lists per time-step.
+        self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
 
     def run_optimization(self):
 
