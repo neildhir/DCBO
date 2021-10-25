@@ -37,7 +37,7 @@ class CBO(Root):
         observation_samples: dict,
         intervention_domain: dict,
         intervention_samples: dict,
-        exploration_sets: dict,
+        exploration_sets: list,
         number_of_trials: int,
         base_target_variable: str,
         ground_truth: list = None,

@@ -101,7 +101,7 @@ def evaluate_acquisition_function(
         # ABO
         sampled_points = np.hstack((sampled_points, np.repeat(temporal_index, sampled_points.shape[0])[:, np.newaxis],))
 
-    x_new = numerical_optimization(acquisition, sampled_points, task, exploration_set,)
+    x_new = numerical_optimization(acquisition, sampled_points, task, exploration_set)
 
     y_acquisition = acquisition.evaluate(x_new)
     return y_acquisition, x_new

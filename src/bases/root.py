@@ -34,9 +34,9 @@ class Root:
         self,
         G: str,
         sem: classmethod,
-        make_sem_estimator: Callable,
         observation_samples: dict,
         intervention_domain: dict,
+        make_sem_estimator: Callable = None,
         intervention_samples: dict = None,
         exploration_sets: list = None,
         estimate_sem: bool = False,
@@ -118,8 +118,12 @@ class Root:
 
         self.interventional_variable_limits = intervention_domain
         assert self.manipulative_variables == list(intervention_domain.keys())
-        assert isinstance(exploration_sets, list)
-        self.exploration_sets = exploration_sets
+        if exploration_sets:
+            assert isinstance(exploration_sets, list)
+            self.exploration_sets = exploration_sets
+        else:
+            # When the only intervention is on the parents of the target variable
+            self.exploration_sets = [tuple(self.manipulative_variables)]
 
         # Extract all target variables from the causal graphical model
         self.all_target_variables = list(filter(lambda k: self.base_target_variable in k, self.G.nodes))
@@ -316,7 +320,6 @@ class Root:
             self.optimal_intervention_levels,
             temporal_index,
         )
-
 
     def _safe_optimization(self, temporal_index, exploration_set, bound_var=1e-02, bound_len=20.0):
         if self.bo_model[temporal_index][exploration_set].model.kern.variance[0] < bound_var:

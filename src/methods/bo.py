@@ -5,26 +5,36 @@ from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
 from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
-from numpy import nan, random, squeeze
+from numpy import random, squeeze
 from numpy.core.multiarray import ndarray
 from src.bases.bo_base import BaseClassBO
+from src.bases.root import Root
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.utilities import assign_blanket, check_blanket, check_reshape_add_data, make_column_shape_2D
+from src.utils.utilities import (
+    assign_blanket,
+    check_blanket,
+    convert_to_dict_of_temporal_lists,
+    make_column_shape_2D,
+    standard_mean_function,
+    zero_variance_adjustment,
+)
 from tqdm import trange
 
 
-class BO(BaseClassBO):
+class BO(Root):
+    # class BO(BaseClassBO):
     def __init__(
         self,
-        graph: str,
+        G: str,
         sem: classmethod,
-        observational_samples: dict,
+        observation_samples: dict,
         intervention_domain: dict,
-        interventional_samples: dict,
+        intervention_samples: dict,
         number_of_trials: int,
         base_target_variable: str,
         task: str = "min",
+        exploration_sets: list = None,
         cost_type: int = 1,
         n_restart: int = 1,
         hp_i_prior: bool = True,
@@ -38,29 +48,39 @@ class BO(BaseClassBO):
         manipulative_variables=None,
         change_points: list = None,
     ):
-        super().__init__(
-            graph,
-            sem,
-            observational_samples,
-            intervention_domain,
-            interventional_samples,
-            base_target_variable,
-            task,
-            cost_type,
-            number_of_trials,
-            n_restart,
-            debug_mode,
-            num_anchor_points,
-            args_sem,
-            manipulative_variables,
-            change_points=change_points,
-        )
+        args = {
+            "G": G,
+            "sem": sem,
+            "observation_samples": observation_samples,
+            "intervention_domain": intervention_domain,
+            "intervention_samples": intervention_samples,
+            "exploration_sets": exploration_sets,
+            "base_target_variable": base_target_variable,
+            "task": task,
+            "cost_type": cost_type,
+            "number_of_trials": number_of_trials,
+            "n_restart": n_restart,
+            "debug_mode": debug_mode,
+            "num_anchor_points": num_anchor_points,
+            "args_sem": args_sem,
+            "manipulative_variables": manipulative_variables,
+            "change_points": change_points,
+        }
+        super().__init__(**args)
 
         self.optimal_assigned_blankets = optimal_assigned_blankets
         self.sample_anchor_points = sample_anchor_points
         self.seed_anchor_points = seed_anchor_points
         self.seed = seed
         self.hp_i_prior = hp_i_prior
+        # Convert observational samples to dict of temporal lists.
+        # We do this because at each time-index we may have a different number of samples.
+        # Because of this, samples need to be stored one lists per time-step.
+        self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
+        # This is partiuclar BO why these lines override the standards in the Root class.
+        for temporal_index in range(self.T):
+            self.mean_function[temporal_index][self.exploration_sets[0]] = standard_mean_function
+            self.variance_function[temporal_index][self.exploration_sets[0]] = zero_variance_adjustment
 
     def run_optimization(self):
 
@@ -90,8 +110,7 @@ class BO(BaseClassBO):
 
                 self.trial_type[temporal_index].append("i")
 
-                # Compute acquisition function given the updated BO models for the interventional data.
-                # Notice that we use current_global and the costs to compute the acquisition functions.
+                # Compute acquisition function given the updated BO models for the interventional data. Notice that we use current_global and the costs to compute the acquisition functions.
                 self._evaluate_acquisition_functions(temporal_index, current_best_global_target, it)
 
                 new_interventional_data_x = self.corresponding_x[best_es]
@@ -184,8 +203,8 @@ class BO(BaseClassBO):
 
             # 4) Finally, populate the summary blanket with info found in (1) to (3)
             assign_blanket(
-                self.true_initial_structural_equation_model,
-                self.true_structural_equation_model,
+                self.true_initial_sem,
+                self.true_sem,
                 self.assigned_blanket,
                 self.optimal_intervention_sets[temporal_index],
                 self.optimal_intervention_levels[temporal_index][self.optimal_intervention_sets[temporal_index]][
@@ -202,38 +221,6 @@ class BO(BaseClassBO):
             # Check optimization results for the current temporal index before moving on
             self._check_optimization_results(temporal_index)
 
-    def _check_optimization_results(self, temporal_index):
-        # Check everything went well with the trials
-        assert len(self.optimal_outcome_values_during_trials[temporal_index]) == self.number_of_trials, (
-            len(self.optimal_outcome_values_during_trials[temporal_index]),
-            self.number_of_trials,
-        )
-        assert len(self.per_trial_cost[temporal_index]) == self.number_of_trials, len(self.per_trial_cost)
-
-        if temporal_index > 0:
-            assert all(
-                len(self.optimal_intervention_levels[temporal_index][es]) == self.number_of_trials
-                for es in self.exploration_sets
-            ), [len(self.optimal_intervention_levels[temporal_index][es]) for es in self.exploration_sets]
-
-        assert self.optimal_intervention_sets[temporal_index] is not None, (
-            self.optimal_intervention_sets,
-            self.optimal_intervention_levels,
-            temporal_index,
-        )
-
-    def _get_updated_interventional_data(self, new_interventional_data_x, y_new, best_es, temporal_index):
-        data_x, data_y = check_reshape_add_data(
-            self.interventional_data_x,
-            self.interventional_data_y,
-            new_interventional_data_x,
-            y_new,
-            best_es,
-            temporal_index,
-        )
-        self.interventional_data_x[temporal_index][best_es] = data_x
-        self.interventional_data_y[temporal_index][best_es] = data_y
-
     def _get_assigned_blanket(self, temporal_index):
         if temporal_index > 0:
             if self.optimal_assigned_blankets is not None:
@@ -243,18 +230,6 @@ class BO(BaseClassBO):
         else:
             assigned_blanket = self.assigned_blanket
         return assigned_blanket
-
-    def _check_new_point(self, best_es, temporal_index):
-        assert best_es is not None, (best_es, self.y_acquired)
-        assert best_es in self.exploration_sets
-
-        # Check that new intervention point is in the allowed intervention domain
-        assert self.intervention_exploration_domain[best_es].check_points_in_domain(self.corresponding_x[best_es])[0], (
-            best_es,
-            temporal_index,
-            self.y_acquired,
-            self.corresponding_x,
-        )
 
     def _evaluate_acquisition_functions(self, temporal_index, current_best_global_target, it):
         for es in self.exploration_sets:
@@ -289,33 +264,6 @@ class BO(BaseClassBO):
                 sample_anchor_points=self.sample_anchor_points,
                 seed_anchor_points=seed_to_pass,
             )
-
-    def _update_opt_params(self, it: int, temporal_index: int, best_es: tuple) -> None:
-
-        # When observed append previous optimal values for logs
-        # Outcome values at previous step
-        self.outcome_values[temporal_index].append(self.outcome_values[temporal_index][-1])
-
-        if it == 0:
-            # Special case for first time index
-            # Assign an outcome values that is the same as the initial value for the first trial
-            self.optimal_outcome_values_during_trials[temporal_index].append(self.outcome_values[temporal_index][-1])
-
-            if self.interventional_data_x[temporal_index][best_es] is None:
-                self.optimal_intervention_levels[temporal_index][best_es][it] = nan
-
-            self.per_trial_cost[temporal_index].append(0.0)
-
-        elif it > 0:
-            # Get previous one cause we are observing thus we no need to recompute it
-            self.optimal_outcome_values_during_trials[temporal_index].append(
-                self.optimal_outcome_values_during_trials[temporal_index][-1]
-            )
-            self.optimal_intervention_levels[temporal_index][best_es][it] = self.optimal_intervention_levels[
-                temporal_index
-            ][best_es][it - 1]
-            # The cost of observation is the same as the previous trial.
-            self.per_trial_cost[temporal_index].append(self.per_trial_cost[temporal_index][-1])
 
     def _update_bo_model(
         self, temporal_index: int, exploration_set: tuple, alpha: float = 2, beta: float = 0.5,
