@@ -11,7 +11,13 @@ from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
 from src.utils.gp_utils import update_sufficient_statistics, update_sufficient_statistics_hat
-from src.utils.utilities import assign_blanket, assign_blanket_hat, check_blanket, convert_to_dict_of_temporal_lists, make_column_shape_2D
+from src.utils.utilities import (
+    assign_blanket,
+    assign_blanket_hat,
+    check_blanket,
+    convert_to_dict_of_temporal_lists,
+    make_column_shape_2D,
+)
 from tqdm import trange
 
 
@@ -21,9 +27,9 @@ class DCBO(BaseClassDCBO):
         G: str,
         sem: classmethod,
         make_sem_estimator: Callable,
-        observational_samples: dict,
+        observation_samples: dict,
         intervention_domain: dict,
-        interventional_samples: dict,
+        intervention_samples: dict,
         exploration_sets: dict,
         number_of_trials: int,
         base_target_variable: str,
@@ -48,32 +54,31 @@ class DCBO(BaseClassDCBO):
         args_sem=None,
         manipulative_variables: list = None,
         change_points: list = None,
-        root_instrument: bool = None,
     ):
-        super().__init__(
-            G,
-            sem,
-            make_sem_estimator,
-            observational_samples,
-            intervention_domain,
-            interventional_samples,
-            exploration_sets,
-            estimate_sem,
-            base_target_variable,
-            task,
-            cost_type,
-            number_of_trials,
-            ground_truth,
-            n_restart,
-            use_mc,
-            debug_mode,
-            online,
-            num_anchor_points,
-            args_sem,
-            manipulative_variables,
-            change_points,
-            root_instrument,
-        )
+        base_args = {
+            "G": G,
+            "sem": sem,
+            "make_sem_estimator": make_sem_estimator,
+            "observation_samples": observation_samples,
+            "intervention_domain": intervention_domain,
+            "intervention_samples": intervention_samples,
+            "exploration_sets": exploration_sets,
+            "estimate_sem": estimate_sem,
+            "base_target_variable": base_target_variable,
+            "task": task,
+            "cost_type": cost_type,
+            "number_of_trials": number_of_trials,
+            "ground_truth": ground_truth,
+            "n_restart": n_restart,
+            "use_mc": use_mc,
+            "debug_mode": debug_mode,
+            "online": online,
+            "num_anchor_points": num_anchor_points,
+            "args_sem": args_sem,
+            "manipulative_variables": manipulative_variables,
+            "change_points": change_points,
+        }
+        super().__init__(**base_args)
 
         self.optimal_assigned_blankets = optimal_assigned_blankets
         self.use_di = use_di

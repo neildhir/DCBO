@@ -1,3 +1,7 @@
+"""
+DCBO base class.
+"""
+
 from copy import deepcopy
 
 import numpy as np
@@ -20,9 +24,9 @@ class BaseClassDCBO(Root):
         G: str,
         sem: classmethod,
         make_sem_estimator: callable,
-        observational_samples: dict,
+        observation_samples: dict,
         intervention_domain: dict,
-        interventional_samples: dict = None,
+        intervention_samples: dict = None,
         exploration_sets: list = None,
         estimate_sem: bool = False,
         base_target_variable: str = "Y",
@@ -43,9 +47,9 @@ class BaseClassDCBO(Root):
             "G": G,
             "sem": sem,
             "make_sem_estimator": make_sem_estimator,
-            "observational_samples": observational_samples,
+            "observation_samples": observation_samples,
             "intervention_domain": intervention_domain,
-            "intervention_samples": interventional_samples,
+            "intervention_samples": intervention_samples,
             "exploration_sets": exploration_sets,
             "estimate_sem": estimate_sem,
             "base_target_variable": base_target_variable,
@@ -66,7 +70,6 @@ class BaseClassDCBO(Root):
 
         self.transfer_pairs = get_transition_input_output_pairs(self.node_parents)
         self.sem_trans_fncs = fit_sem_trans_fncs(self.observational_samples, self.transfer_pairs)
-        self.sem_emit_fncs = fit_sem_emit_fncs(self.observational_samples, self.emission_pairs)
 
         self.time_indexed_trans_fncs_inputs = {t: [] for t in range(1, self.T)}
         for t in range(1, self.T):
@@ -281,7 +284,6 @@ class BaseClassDCBO(Root):
 
         self._update_sem_emit_fncs(temporal_index, temporal_index_data=temporal_index_data)
         self._update_sem_transmission_functions(temporal_index, temporal_index_data=temporal_index_data)
-
 
     def _get_interventional_hp(self, temporal_index, exploration_set, prior_var, prior_lengthscale):
         if temporal_index > 0 and self.transfer_hp_i:

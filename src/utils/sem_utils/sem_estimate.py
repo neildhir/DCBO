@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from typing import Callable
+from typing import Callable, Dict
 
 from numpy.random import randn
 
@@ -7,10 +7,10 @@ from ..utilities import select_sample
 
 
 def auto_sem_hat(
-    summary_graph_node_parents: dict,
+    summary_graph_node_parents: Dict[str, tuple],
+    independent_causes: Dict[str, bool],
     emission_functions: dict,
     transition_functions: dict = None,
-    independent_causes: dict = None,
 ) -> classmethod:
     """
     This function is used to automatically create the estimates for the edges in a given graph.

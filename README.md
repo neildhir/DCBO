@@ -1,6 +1,6 @@
 # Dynamic Causal Bayesian Optimization
 
-This is a Python implementation of [Dynamic Causal Bayesian Optimization](https://nips.cc/) as presented at Neurips 2021.
+This is a Python implementation of [Dynamic Causal Bayesian Optimization](https://nips.cc/) as presented at NeurIPS 2021.
 
 ## Abstract
 
@@ -24,7 +24,7 @@ This paper studies the problem of performing a sequence of optimal interventions
 
 - Parallelise sampling functions so that they are not sequential, that is far too slow
 
-- Implement KDE for proper handling of exogeneous noise variables, as done in CEO
+- Implement KDE for proper handling of exogenous noise variables, as done in CEO
 
 - Consider start using Julia/Fortran for heavy matrix operations e.g. for acquisition function evaluation
 
@@ -41,19 +41,17 @@ conda or pip
 - scipy
 - networkx
 
-## Demo and tutorials
+## Demo and notebooks
 
-```
-    Optimisation options:
+This is roughly how the algorithms will behave and how they are implemented:
 
-    1) DCBO         : (causal_prior == True, dynamic == True)
-    2) Dynamic BO   : (causal_prior == False, dynamic == True)
-    3) CBO          : (causal_prior == True, dynamic == False)
-    4) BO           : (causal_prior == False, dynamic == False)
-```
+1. DCBO: `causal_prior == True, dynamic == True`
+2. ABO: `causal_prior == False, dynamic == True`
+3. CBO: `causal_prior == True, dynamic == False`
+4. BO: `causal_prior == False, dynamic == False`
 
 - [stat_scm.ipynb](notebooks/stat_scm.ipynb) walks through the basic steps required to run all methods (BO, ABO, CBO and DCBO) on the example SCM shown in figure 1 of the paper.
-- [nonstat_scm.ipynb](notebooks/stat_scm.ipynb) demonstrates how to run the methods on the SCM with the DAG shown in figure 3(c) of the paper, but over multiple recplicates, to allow for confidence bounds over the results.
+- [nonstat_scm.ipynb](notebooks/stat_scm.ipynb) demonstrates how to run the methods on the SCM with the DAG shown in figure 3(c) of the paper, but over multiple replicates, to allow for confidence bounds over the results.
 
 ## Citation
 
@@ -76,3 +74,7 @@ This program is free software; you can redistribute it and/or modify it under th
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+## Disclaimer
+
+This is research code. Written by researchers for researchers. We do not have enough time nor are we professional software engineers and are thus not equipped to make a (more) robust implementation. Consequently, things may break. If they do please do not be angry and instead let us know so we can fix them. Better yet, please contribute by submitting PRs to make this project better.

@@ -2,45 +2,53 @@ from copy import deepcopy
 from random import choice
 from typing import Callable
 
+import numpy as np
+from matplotlib import pyplot as plt
 from networkx.classes.multidigraph import MultiDiGraph
+from numpy.core.multiarray import ndarray
+from numpy.core.numeric import nan
 from src.bayes_opt.cost_functions import define_costs
 from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
 from src.utils.sem_utils.emissions import fit_sem_emit_fncs, get_emissions_input_output_pairs
+from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
     make_sequential_intervention_dictionary,
 )
 from src.utils.utilities import (
+    check_reshape_add_data,
+    convert_to_dict_of_temporal_lists,
     create_intervention_exploration_domain,
     initialise_DCBO_parameters_and_objects_filtering,
     initialise_global_outcome_dict_new,
     initialise_optimal_intervention_level_list,
+    make_column_shape_2D,
 )
 
 
-class BaseClassCBO:
+class RooTest:
     """
-    Base class for the CBO system.
+    Base class with common operations, variables and functions for all BO methods.
     """
 
     def __init__(
         self,
         G: str,
         sem: classmethod,
-        make_sem_hat: Callable,
-        observational_samples: dict,
+        make_sem_estimator: Callable,
+        observation_samples: dict,
         intervention_domain: dict,
-        interventional_samples: dict = None,  # interventional data collected for specific intervention sets
+        intervention_samples: dict = None,  # interventional data collected for specific intervention sets
         exploration_sets: list = None,
-        number_of_trials=10,
-        base_target_variable: str = "Y",
-        ground_truth: list = None,
         estimate_sem: bool = False,
+        base_target_variable: str = "Y",
         task: str = "min",
-        n_restart: int = 1,
         cost_type: int = 1,  # There are multiple options here
         use_mc: bool = False,
+        number_of_trials=10,
+        ground_truth: list = None,
+        n_restart: int = 1,
         debug_mode: bool = False,
         online: bool = False,
         num_anchor_points: int = 100,
@@ -58,7 +66,7 @@ class BaseClassCBO:
         # These will be used in the target function evaluation
         self.true_initial_sem = true_sem.static()  # for t = 0
         self.true_sem = true_sem.dynamic()  # for t > 0
-        self.make_sem_hat = make_sem_hat
+        self.make_sem_hat = make_sem_estimator
 
         assert isinstance(G, MultiDiGraph)
         self.G = G
@@ -69,19 +77,20 @@ class BaseClassCBO:
         self.use_mc = use_mc
 
         # Total time-steps and sample count per time-step
-        _, T = observational_samples[list(observational_samples.keys())[0]].shape
-        self.observational_samples = observational_samples
-        self.base_target_variable = base_target_variable
+        _, self.T = observation_samples[list(observation_samples.keys())[0]].shape
+        self.observational_samples = observation_samples
+        self.base_target_variable = base_target_variable  # This has to be reflected in the CGM
         self.index_name = 0
         self.number_of_trials = number_of_trials
 
         #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
-        time_slice_vars = observational_samples.keys()
+        time_slice_vars = observation_samples.keys()
         self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
         #  Checks what vars in DAG (if any) are independent causes
         self.independent_causes = get_independent_causes(time_slice_vars, G)
 
-        self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(T, self.G)
+        self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
+
         self.sem_emit_fncs = fit_sem_emit_fncs(self.observational_samples, self.emission_pairs)
 
         # Check that we are either minimising or maximising the objective function
@@ -94,6 +103,10 @@ class BaseClassCBO:
 
         # Instantiate blanket that will form final solution
         (self.optimal_blanket, self.total_timesteps,) = make_sequential_intervention_dictionary(self.G)
+
+        # Contains all values a assigned as the DCBO walks through the graph;
+        # optimal intervention level are assigned at the same temporal level,
+        # for which we then use spatial SEMs to predict the other variable levels on that time-slice.
         self.assigned_blanket = deepcopy(self.optimal_blanket)
         self.empty_intervention_blanket, _ = make_sequential_intervention_dictionary(self.G)
 
@@ -121,6 +134,7 @@ class BaseClassCBO:
         # Objective function params
         self.bo_model = {t: {es: None for es in self.exploration_sets} for t in range(self.total_timesteps)}
 
+        # Store true objective function
         self.ground_truth = ground_truth
 
         # Number of points where to evaluate acquisition function
@@ -138,7 +152,7 @@ class BaseClassCBO:
         self.sequence_of_interventions_during_trials = [[] for _ in range(self.total_timesteps)]
 
         # Initial optimal solutions
-        if interventional_samples:
+        if intervention_samples:
             # Provide initial interventional data
             (
                 initial_optimal_sequential_intervention_sets,
@@ -148,7 +162,7 @@ class BaseClassCBO:
                 self.interventional_data_y,
             ) = initialise_DCBO_parameters_and_objects_filtering(
                 self.exploration_sets,
-                interventional_samples,
+                intervention_samples,
                 self.base_target_variable,
                 self.total_timesteps,
                 self.task,
@@ -157,9 +171,9 @@ class BaseClassCBO:
             )
         else:
             # No initial interventional data
-            initial_optimal_sequential_intervention_sets = [choice(self.exploration_sets)] + (T - 1) * [None]
-            initial_optimal_target_values = T * [None]
-            initial_optimal_sequential_intervention_levels = T * [None]
+            initial_optimal_sequential_intervention_sets = [choice(self.exploration_sets)] + (self.T - 1) * [None]
+            initial_optimal_target_values = self.T * [None]
+            initial_optimal_sequential_intervention_levels = self.T * [None]
             self.interventional_data_x = deepcopy(self.bo_model)
             self.interventional_data_y = deepcopy(self.bo_model)
 
@@ -186,12 +200,12 @@ class BaseClassCBO:
         self.best_initial_es = initial_optimal_sequential_intervention_sets[0]  # 0 indexes the first time-step
 
         # Target functions for Bayesian optimisation - ground truth
-        self.target_functions = {t: {es: None for es in self.exploration_sets} for t in range(T)}
+        self.target_functions = {t: {es: None for es in self.exploration_sets} for t in range(self.T)}
 
-        for temporal_index in range(T):
+        for temporal_index in range(self.T):
             for es in self.exploration_sets:
                 self.target_functions[temporal_index][es] = evaluate_target_function(
-                    self.true_initial_sem, self.true_sem, self.G, es, self.observational_samples.keys(), T,
+                    self.true_initial_sem, self.true_sem, self.G, es, self.observational_samples.keys(), self.T,
                 )
 
         # Parameter space for optimisation
@@ -200,7 +214,7 @@ class BaseClassCBO:
         )
 
         # Optimisation specific parameters to initialise
-        self.trial_type = [[] for _ in range(self.total_timesteps)]
+        self.trial_type = [[] for _ in range(self.total_timesteps)]  # If we observed or intervened during the trial
         self.cost_functions = define_costs(self.manipulative_variables, self.base_target_variable, cost_type)
         self.per_trial_cost = [[] for _ in range(self.total_timesteps)]
         self.optimal_intervention_sets = [None for _ in range(self.total_timesteps)]
@@ -211,3 +225,90 @@ class BaseClassCBO:
         self.estimate_sem = estimate_sem
         if self.estimate_sem:
             self.assigned_blanket_hat = deepcopy(self.optimal_blanket)
+
+    def _plot_conditional_distributions(self, temporal_index, it):
+        print("Time:", temporal_index)
+        print("Iter:", it)
+        print("\n### Emissions ###\n")
+        for key in self.sem_emit_fncs[temporal_index]:
+            if len(key) == 1:
+                print("{}\n".format(key))
+                self.sem_emit_fncs[temporal_index][key].plot()
+                plt.show()
+
+        print("\n### Transmissions ###\n")
+        if callable(getattr(self.__class__, self.sem_trans_fncs)):
+            for key in self.sem_trans_fncs.keys():
+                if len(key) == 1:
+                    print(key)
+                    self.sem_trans_fncs[key].plot()
+                    plt.show()
+
+    def _check_optimization_results(self, temporal_index):
+        # Check everything went well with the trials
+        assert len(self.optimal_outcome_values_during_trials[temporal_index]) == self.number_of_trials, (
+            len(self.optimal_outcome_values_during_trials[temporal_index]),
+            self.number_of_trials,
+        )
+        assert len(self.per_trial_cost[temporal_index]) == self.number_of_trials, len(self.per_trial_cost)
+
+        if temporal_index > 0:
+            assert all(
+                len(self.optimal_intervention_levels[temporal_index][es]) == self.number_of_trials
+                for es in self.exploration_sets
+            ), [len(self.optimal_intervention_levels[temporal_index][es]) for es in self.exploration_sets]
+
+        assert self.optimal_intervention_sets[temporal_index] is not None, (
+            self.optimal_intervention_sets,
+            self.optimal_intervention_levels,
+            temporal_index,
+        )
+
+    def _check_new_point(self, best_es, temporal_index):
+        assert best_es is not None, (best_es, self.y_acquired)
+        assert best_es in self.exploration_sets
+
+        # Check that new intervenƒtion point is in the allowed intervention domain
+        assert self.intervention_exploration_domain[best_es].check_points_in_domain(self.corresponding_x[best_es])[0], (
+            best_es,
+            temporal_index,
+            self.y_acquired,
+            self.corresponding_x,
+        )
+
+    def _plot_surrogate_model(self, temporal_index):
+        # Plot model
+        for es in self.exploration_sets:
+            if len(es) == 1:
+                inputs = np.asarray(self.interventional_grids[es])
+
+                if self.bo_model[temporal_index][es] is not None:
+                    mean, var = self.bo_model[temporal_index][es].predict(self.interventional_grids[es])
+                    print("\n\t\t[1] The BO model exists for ES: {} at t == {}.\n".format(es, temporal_index))
+                    print("Assigned blanket", self.assigned_blanket)
+                else:
+                    mean = self.mean_function[temporal_index][es](self.interventional_grids[es])
+                    var = self.variance_function[temporal_index][es](self.interventional_grids[es]) + np.ones_like(
+                        self.variance_function[temporal_index][es](self.interventional_grids[es])
+                    )
+                    print("\n\t\t[0] The BO model does not exists for ES: {} at t == {}.\n".format(es, temporal_index))
+                    print("Assigned blanket", self.assigned_blanket)
+
+                true = make_column_shape_2D(self.ground_truth[temporal_index][es])
+
+                if (
+                    self.interventional_data_x[temporal_index][es] is not None
+                    and self.interventional_data_y[temporal_index][es] is not None
+                ):
+                    plt.scatter(
+                        self.interventional_data_x[temporal_index][es], self.interventional_data_y[temporal_index][es],
+                    )
+
+                plt.fill_between(inputs[:, 0], (mean - var)[:, 0], (mean + var)[:, 0], alpha=0.2)
+                plt.plot(
+                    inputs, mean, "b", label="$do{}$ at $t={}$".format(es, temporal_index),
+                )
+                plt.plot(inputs, true, "r", label="True at $t={}$".format(temporal_index))
+                plt.legend()
+                plt.show()
+

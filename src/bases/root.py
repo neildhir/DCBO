@@ -9,7 +9,7 @@ from numpy.core.multiarray import ndarray
 from numpy.core.numeric import nan
 from src.bayes_opt.cost_functions import define_costs
 from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
-from src.utils.sem_utils.emissions import get_emissions_input_output_pairs
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs, get_emissions_input_output_pairs
 from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
@@ -37,9 +37,9 @@ class Root:
         G: str,
         sem: classmethod,
         make_sem_estimator: Callable,
-        observational_samples: dict,
+        observation_samples: dict,
         intervention_domain: dict,
-        interventional_samples: dict = None,  # interventional data collected for specific intervention sets
+        intervention_samples: dict = None,  # interventional data collected for specific intervention sets
         exploration_sets: list = None,
         estimate_sem: bool = False,
         base_target_variable: str = "Y",
@@ -77,19 +77,21 @@ class Root:
         self.use_mc = use_mc
 
         # Total time-steps and sample count per time-step
-        _, self.T = observational_samples[list(observational_samples.keys())[0]].shape
-        self.observational_samples = observational_samples
+        _, self.T = observation_samples[list(observation_samples.keys())[0]].shape
+        self.observational_samples = observation_samples
         self.base_target_variable = base_target_variable  # This has to be reflected in the CGM
         self.index_name = 0
         self.number_of_trials = number_of_trials
 
         #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
-        time_slice_vars = observational_samples.keys()
+        time_slice_vars = observation_samples.keys()
         self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
         #  Checks what vars in DAG (if any) are independent causes
         self.independent_causes = get_independent_causes(time_slice_vars, G)
 
         self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
+
+        self.sem_emit_fncs = fit_sem_emit_fncs(self.observational_samples, self.emission_pairs)
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task
@@ -150,7 +152,7 @@ class Root:
         self.sequence_of_interventions_during_trials = [[] for _ in range(self.total_timesteps)]
 
         # Initial optimal solutions
-        if interventional_samples:
+        if intervention_samples:
             # Provide initial interventional data
             (
                 initial_optimal_sequential_intervention_sets,
@@ -160,7 +162,7 @@ class Root:
                 self.interventional_data_y,
             ) = initialise_DCBO_parameters_and_objects_filtering(
                 self.exploration_sets,
-                interventional_samples,
+                intervention_samples,
                 self.base_target_variable,
                 self.total_timesteps,
                 self.task,
