@@ -65,10 +65,7 @@ class BO(BaseClassBO):
     def run_optimization(self):
 
         # Walk through the graph, from left to right, i.e. the temporal dimension
-        for temporal_index in trange(self.total_timesteps, desc="Time index"):
-
-            # if self.debug_mode:
-            print("Time:", temporal_index)
+        for temporal_index in trange(self.T, desc="Time index"):
 
             # Evaluate each target
             target = self.all_target_variables[temporal_index]

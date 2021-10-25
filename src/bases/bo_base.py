@@ -63,7 +63,7 @@ class BaseClassBO:
         self.n_restart = n_restart
 
         # Total time-steps and sample count per time-step
-        N, T = observational_samples[list(observational_samples.keys())[0]].shape
+        _, self.T = observational_samples[list(observational_samples.keys())[0]].shape
 
         assert isinstance(graph, MultiDiGraph)
         self.graph = graph
@@ -82,11 +82,11 @@ class BaseClassBO:
         self.index_name = 0
 
         # Instantiate blanket that will form final solution
-        (self.optimal_blanket, self.total_timesteps,) = make_sequential_intervention_dictionary(self.graph)
+        self.optimal_blanket = make_sequential_intervention_dictionary(self.graph, self.T)
 
         # This is needed to compute the ground truth
         self.assigned_blanket = deepcopy(self.optimal_blanket)
-        self.empty_intervention_blanket, _ = make_sequential_intervention_dictionary(self.graph)
+        self.empty_intervention_blanket = make_sequential_intervention_dictionary(self.graph, self.T)
 
         # Canonical manipulative variables
         if manipulative_variables is None:
@@ -107,7 +107,7 @@ class BaseClassBO:
             self.exploration_sets, intervention_domain, size_intervention_grid=100
         )
         # Objective function params
-        self.bo_model = {t: {es: None for es in self.exploration_sets} for t in range(self.total_timesteps)}
+        self.bo_model = {t: {es: None for es in self.exploration_sets} for t in range(self.T)}
         self.mean_function = deepcopy(self.bo_model)
         self.variance_function = deepcopy(self.bo_model)
 
@@ -117,12 +117,12 @@ class BaseClassBO:
         # Only one set for BO
         assert len(self.exploration_sets) == 1
 
-        for temporal_index in range(T):
+        for temporal_index in range(self.T):
             self.mean_function[temporal_index][self.exploration_sets[0]] = standard_mean_function
             self.variance_function[temporal_index][self.exploration_sets[0]] = zero_variance_adjustment
 
         # For logging
-        self.sequence_of_interventions_during_trials = [[] for _ in range(self.total_timesteps)]
+        self.sequence_of_interventions_during_trials = [[] for _ in range(self.T)]
         # Initial optimal solutions
         if interventional_samples:
             #  Provide initial interventional data
@@ -136,16 +136,16 @@ class BaseClassBO:
                 self.exploration_sets,
                 interventional_samples,
                 self.base_target_variable,
-                self.total_timesteps,
+                self.T,
                 self.task,
                 index_name=0,
                 nr_interventions=None,
             )
         else:
             #  No initial interventional data
-            initial_optimal_sequential_intervention_sets = [choice(self.exploration_sets)] + (T - 1) * [None]
-            initial_optimal_target_values = T * [None]
-            initial_optimal_sequential_intervention_levels = T * [None]
+            initial_optimal_sequential_intervention_sets = [choice(self.exploration_sets)] + (self.T - 1) * [None]
+            initial_optimal_target_values = self.T * [None]
+            initial_optimal_sequential_intervention_levels = self.T * [None]
             self.interventional_data_x = deepcopy(self.bo_model)
             self.interventional_data_y = deepcopy(self.bo_model)
 
@@ -153,17 +153,15 @@ class BaseClassBO:
             len(initial_optimal_sequential_intervention_levels)
             == len(initial_optimal_target_values)
             == len(initial_optimal_sequential_intervention_levels)
-            == self.total_timesteps
+            == self.T
         )
 
         # Dict indexed by the global exploration sets, stores the best
-        self.outcome_values = initialise_global_outcome_dict_new(
-            self.total_timesteps, initial_optimal_target_values, self.blank_val
-        )
-        self.optimal_outcome_values_during_trials = [[] for _ in range(self.total_timesteps)]
+        self.outcome_values = initialise_global_outcome_dict_new(self.T, initial_optimal_target_values, self.blank_val)
+        self.optimal_outcome_values_during_trials = [[] for _ in range(self.T)]
 
         self.optimal_intervention_levels = initialise_optimal_intervention_level_list(
-            self.total_timesteps,
+            self.T,
             self.exploration_sets,
             initial_optimal_sequential_intervention_sets,
             initial_optimal_sequential_intervention_levels,
@@ -172,9 +170,9 @@ class BaseClassBO:
         self.best_initial_es = initial_optimal_sequential_intervention_sets[0]  # 0 indexes the first time-step
 
         # Target functions for Bayesian optimisation - ground truth
-        self.target_functions = {t: {es: None for es in self.exploration_sets} for t in range(T)}
+        self.target_functions = {t: {es: None for es in self.exploration_sets} for t in range(self.T)}
 
-        for temporal_index in range(T):
+        for temporal_index in range(self.T):
             for es in self.exploration_sets:
                 self.target_functions[temporal_index][es] = evaluate_target_function(
                     self.true_initial_structural_equation_model,
@@ -182,7 +180,7 @@ class BaseClassBO:
                     self.graph,
                     es,
                     self.observational_samples.keys(),
-                    T,
+                    self.T,
                 )
 
         # Parameter space for optimisation
@@ -190,10 +188,10 @@ class BaseClassBO:
             self.exploration_sets, intervention_domain,
         )
         #  Optimisation specific parameters to initialise
-        self.trial_type = [[] for _ in range(self.total_timesteps)]  # If we observed or intervened during the trial
+        self.trial_type = [[] for _ in range(self.T)]  # If we observed or intervened during the trial
         self.cost_functions = define_costs(self.manipulative_variables, self.base_target_variable, cost_type)
-        self.per_trial_cost = [[] for _ in range(self.total_timesteps)]
-        self.optimal_intervention_sets = [None for _ in range(self.total_timesteps)]
+        self.per_trial_cost = [[] for _ in range(self.T)]
+        self.optimal_intervention_sets = [None for _ in range(self.T)]
         # Convert observational samples to dict of temporal lists.
         self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
         # Acquisition function specifics
