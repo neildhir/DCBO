@@ -7,7 +7,6 @@ from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
 from numpy import random, squeeze
 from numpy.core.multiarray import ndarray
-from src.bases.bo_base import BaseClassBO
 from src.bases.root import Root
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
@@ -23,7 +22,6 @@ from tqdm import trange
 
 
 class BO(Root):
-    # class BO(BaseClassBO):
     def __init__(
         self,
         G: str,
@@ -77,7 +75,7 @@ class BO(Root):
         # We do this because at each time-index we may have a different number of samples.
         # Because of this, samples need to be stored one lists per time-step.
         self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
-        # This is partiuclar BO why these lines override the standards in the Root class.
+        # This is partiuclar to BO, why these lines override the standards in the Root class.
         for temporal_index in range(self.T):
             self.mean_function[temporal_index][self.exploration_sets[0]] = standard_mean_function
             self.variance_function[temporal_index][self.exploration_sets[0]] = zero_variance_adjustment

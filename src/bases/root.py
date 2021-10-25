@@ -95,9 +95,9 @@ class Root:
         assert task in ["min", "max"], task
         self.task = task
         if task == "min":
-            self.blank_val = 1e7  # Positive infinity
+            self.blank_val = 1e7  # Positive "infinity"
         elif task == "max":
-            self.blank_val = -1e7  # Negative infinity
+            self.blank_val = -1e7  # Negative "infinity"
 
         # Instantiate blanket that will form final solution
         self.optimal_blanket = make_sequential_intervention_dictionary(self.G, self.T)
