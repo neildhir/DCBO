@@ -11,6 +11,7 @@ from src.bayes_opt.cost_functions import define_costs
 from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
 from src.utils.gp_utils import update_sufficient_statistics, update_sufficient_statistics_hat
 from src.utils.sem_utils.emissions import fit_sem_emit_fncs, get_emissions_input_output_pairs
+from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
@@ -18,6 +19,7 @@ from src.utils.sequential_intervention_functions import (
 )
 from src.utils.utilities import (
     check_reshape_add_data,
+    convert_to_dict_of_temporal_lists,
     create_intervention_exploration_domain,
     initialise_DCBO_parameters_and_objects_filtering,
     initialise_global_outcome_dict_new,
@@ -415,3 +417,53 @@ class Root:
                     dynamic=dynamic,
                     assigned_blanket=assigned_blanket,  # At t=0 this is a dummy variable as it has not been assigned yet.
                 )
+
+    def _update_observational_data(self, temporal_index):
+        if temporal_index > 0:
+            if self.online:
+                if isinstance(self.n_obs_t, list):
+                    local_n_t = self.n_obs_t[temporal_index]
+                else:
+                    local_n_t = self.n_obs_t
+                assert local_n_t is not None
+
+                # Sample new data
+                set_observational_samples = sequentially_sample_model(
+                    static_sem=self.true_initial_sem,
+                    dynamic_sem=self.true_sem,
+                    total_timesteps=temporal_index + 1,
+                    sample_count=local_n_t,
+                    use_sem_estimate=False,
+                    interventions=self.assigned_blanket,
+                )
+
+                # Reshape data
+                set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
+
+                for var in self.observational_samples.keys():
+                    self.observational_samples[var][temporal_index] = set_observational_samples[var][temporal_index]
+            else:
+                if isinstance(self.n_obs_t, list):
+                    local_n_obs = self.n_obs_t[temporal_index]
+
+                    n_stored_observations = len(
+                        self.observational_samples[list(self.observational_samples.keys())[0]][temporal_index]
+                    )
+
+                    if self.online is False and local_n_obs != n_stored_observations:
+                        # We already have the same number of observations stored
+                        set_observational_samples = sequentially_sample_model(
+                            static_sem=self.true_initial_sem,
+                            dynamic_sem=self.true_sem,
+                            total_timesteps=temporal_index + 1,
+                            sample_count=local_n_obs,
+                            use_sem_estimate=False,
+                        )
+                        # Reshape data
+                        set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
+
+                        for var in self.observational_samples.keys():
+                            self.observational_samples[var][temporal_index] = set_observational_samples[var][
+                                temporal_index
+                            ]
+

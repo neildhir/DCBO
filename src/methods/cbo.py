@@ -396,7 +396,6 @@ class CBO(Root):
 
         input_dim = len(exploration_set)
 
-        # if not self.bo_model[temporal_index][exploration_set]:
         # Specify mean function
         mf = Mapping(input_dim, 1)
         mf.f = self.mean_function[temporal_index][exploration_set]
@@ -444,55 +443,6 @@ class CBO(Root):
 
         self.bo_model[temporal_index][exploration_set] = GPyModelWrapper(model)
         self._safe_optimization(temporal_index, exploration_set)
-
-    def _update_observational_data(self, temporal_index):
-        if temporal_index > 0:
-            if self.online:
-                if isinstance(self.n_obs_t, list):
-                    local_n_t = self.n_obs_t[temporal_index]
-                else:
-                    local_n_t = self.n_obs_t
-                assert local_n_t is not None
-
-                # Sample new data
-                set_observational_samples = sequentially_sample_model(
-                    static_sem=self.true_initial_sem,
-                    dynamic_sem=self.true_sem,
-                    total_timesteps=temporal_index + 1,
-                    sample_count=local_n_t,
-                    use_sem_estimate=False,
-                    interventions=self.assigned_blanket,
-                )
-
-                # Reshape data
-                set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
-
-                for var in self.observational_samples.keys():
-                    self.observational_samples[var][temporal_index] = set_observational_samples[var][temporal_index]
-            else:
-                if isinstance(self.n_obs_t, list):
-                    local_n_obs = self.n_obs_t[temporal_index]
-
-                    n_stored_observations = len(
-                        self.observational_samples[list(self.observational_samples.keys())[0]][temporal_index]
-                    )
-
-                    if self.online is False and local_n_obs != n_stored_observations:
-                        # We already have the same number of observations stored
-                        set_observational_samples = sequentially_sample_model(
-                            static_sem=self.true_initial_sem,
-                            dynamic_sem=self.true_sem,
-                            total_timesteps=temporal_index + 1,
-                            sample_count=local_n_obs,
-                            use_sem_estimate=False,
-                        )
-                        # Reshape data
-                        set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
-
-                        for var in self.observational_samples.keys():
-                            self.observational_samples[var][temporal_index] = set_observational_samples[var][
-                                temporal_index
-                            ]
 
     def _get_assigned_blanket(self, temporal_index):
         if temporal_index > 0:
