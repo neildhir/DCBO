@@ -13,6 +13,7 @@ from GPy.models import GPRegression
 from numpy import nan, squeeze
 from numpy.core.multiarray import ndarray
 from src.bases.cbo_base import BaseClassCBO
+from src.bases.root import Root
 from src.bases.root_test import RooTest
 from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
@@ -31,16 +32,17 @@ from src.utils.utilities import (
 from tqdm import trange
 
 
-# class OLDCBO(BaseClassCBO):
-class OLDCBO(RooTest):
+# class OLDCBO(BaseClassCBO): # Works
+# class OLDCBO(RooTest):  #  Works
+class OLDCBO(Root):  # Does not work
     def __init__(
         self,
         G: str,
         sem: classmethod,
-        make_sem_hat: Callable,
-        observational_samples: dict,
+        make_sem_estimator: Callable,
+        observation_samples: dict,
         intervention_domain: dict,
-        interventional_samples: dict,
+        intervention_samples: dict,
         exploration_sets: dict,
         number_of_trials: int,
         base_target_variable: str,
@@ -67,10 +69,10 @@ class OLDCBO(RooTest):
         args = {
             "G": G,
             "sem": sem,
-            "make_sem_hat": make_sem_hat,
-            "observational_samples": observational_samples,
+            "make_sem_estimator": make_sem_estimator,
+            "observation_samples": observation_samples,
             "intervention_domain": intervention_domain,
-            "interventional_samples": interventional_samples,
+            "intervention_samples": intervention_samples,
             "exploration_sets": exploration_sets,
             "estimate_sem": estimate_sem,
             "base_target_variable": base_target_variable,
@@ -102,7 +104,7 @@ class OLDCBO(RooTest):
             assert self.ground_truth is not None, "Provide ground truth to plot surrogate models"
 
         # Walk through the graph, from left to right, i.e. the temporal dimension
-        for temporal_index in trange(self.total_timesteps, desc="Time index"):
+        for temporal_index in trange(self.T, desc="Time index"):
 
             if self.debug_mode:
                 print("\n\t\t\t\t###########################")
@@ -120,14 +122,12 @@ class OLDCBO(RooTest):
             self._update_observational_data(temporal_index=temporal_index)
             self._update_interventional_data(temporal_index=temporal_index)
 
-            # Get blanket to compute y_new
-            assigned_blanket = self._get_assigned_blanket(temporal_index)
-
             if temporal_index > 0 and (self.online or isinstance(self.n_obs_t, list)):
                 self._update_sem_emit_fncs(temporal_index)
 
             # Get blanket to compute y_new
             assigned_blanket = self._get_assigned_blanket(temporal_index)
+
             for it in range(self.number_of_trials):
 
                 if self.debug_mode:
@@ -486,98 +486,6 @@ class OLDCBO(RooTest):
 
         self._safe_optimization(temporal_index, exploration_set)
 
-    ####### All below is in the Root class
-
-    def _get_assigned_blanket(self, temporal_index):
-        if temporal_index > 0:
-            if self.optimal_assigned_blankets is not None:
-                assigned_blanket = self.optimal_assigned_blankets[temporal_index]
-            else:
-                assigned_blanket = self.assigned_blanket
-        else:
-            assigned_blanket = self.assigned_blanket
-        return assigned_blanket
-
-    def _check_new_point(self, best_es, temporal_index):
-        assert best_es is not None, (best_es, self.y_acquired)
-        assert best_es in self.exploration_sets
-
-        # Check that new intervention point is in the allowed intervention domain
-        assert self.intervention_exploration_domain[best_es].check_points_in_domain(self.corresponding_x[best_es])[0], (
-            best_es,
-            temporal_index,
-            self.y_acquired,
-            self.corresponding_x,
-        )
-
-    def _check_optimization_results(self, temporal_index):
-        # Check everything went well with the trials
-        assert len(self.optimal_outcome_values_during_trials[temporal_index]) == self.number_of_trials, (
-            len(self.optimal_outcome_values_during_trials[temporal_index]),
-            self.number_of_trials,
-        )
-        assert len(self.per_trial_cost[temporal_index]) == self.number_of_trials, len(self.per_trial_cost)
-
-        if temporal_index > 0:
-            assert all(
-                len(self.optimal_intervention_levels[temporal_index][es]) == self.number_of_trials
-                for es in self.exploration_sets
-            ), [len(self.optimal_intervention_levels[temporal_index][es]) for es in self.exploration_sets]
-
-        assert self.optimal_intervention_sets[temporal_index] is not None, (
-            self.optimal_intervention_sets,
-            self.optimal_intervention_levels,
-            temporal_index,
-        )
-
-    def _plot_conditional_distributions(self, emission_vars, temporal_index, it):
-        print("Time:", temporal_index)
-        print("Iter:", it)
-        print("### Emissions ###")
-        for s in emission_vars:
-            self.sem_emit_fncs[temporal_index][s].plot()
-            plt.title(s)
-            plt.show()
-
-    def _plot_surrogate_model(
-        self, temporal_index,
-    ):
-        # Plot model
-        for es in self.exploration_sets:
-            if len(es) == 1:
-                inputs = np.asarray(self.interventional_grids[es])
-                if self.bo_model[temporal_index][es] is not None:
-                    mean, var = self.bo_model[temporal_index][es].predict(self.interventional_grids[es])
-                    print("\n\t\t[1] The BO model exists for ES: {} at t == {}.\n".format(es, temporal_index))
-                    print("Assigned blanket", self.assigned_blanket)
-                else:
-                    if temporal_index > 0 and isinstance(self.n_obs_t, list) and self.n_obs_t[temporal_index] == 1:
-                        mean = np.zeros_like(self.interventional_grids[es])
-                        var = np.ones_like(self.interventional_grids[es])
-                    else:
-                        mean = self.mean_function[temporal_index][es](self.interventional_grids[es])
-                        var = self.variance_function[temporal_index][es](self.interventional_grids[es]) + np.ones_like(
-                            self.variance_function[temporal_index][es](self.interventional_grids[es])
-                        )
-
-                true = make_column_shape_2D(self.ground_truth[temporal_index][es])
-
-                if (
-                    self.interventional_data_x[temporal_index][es] is not None
-                    and self.interventional_data_y[temporal_index][es] is not None
-                ):
-                    plt.scatter(
-                        self.interventional_data_x[temporal_index][es], self.interventional_data_y[temporal_index][es],
-                    )
-
-                plt.fill_between(inputs[:, 0], (mean - var)[:, 0], (mean + var)[:, 0], alpha=0.2)
-                plt.plot(
-                    inputs, mean, "b", label="$do{}$ at $t={}$".format(es, temporal_index),
-                )
-                plt.plot(inputs, true, "r", label="True at $t={}$".format(temporal_index))
-                plt.legend()
-                plt.show()
-
     def _update_observational_data(self, temporal_index):
 
         if temporal_index > 0:
@@ -638,49 +546,12 @@ class OLDCBO(RooTest):
                             self.observational_samples[var][temporal_index - 1]
                         )
 
-    def _update_opt_params(self, it: int, temporal_index: int, best_es: tuple) -> None:
-
-        # When observed append previous optimal values for logs
-        # Outcome values at previous step
-
-        self.outcome_values[temporal_index].append(self.outcome_values[temporal_index][-1])
-
-        if it == 0:
-            # Special case for first time index
-            # At first trial assign an outcome values that is the same as the initial value
-            self.optimal_outcome_values_during_trials[temporal_index].append(self.outcome_values[temporal_index][-1])
-
-            if self.interventional_data_x[temporal_index][best_es] is None:
-                self.optimal_intervention_levels[temporal_index][best_es][it] = nan
-
-            self.per_trial_cost[temporal_index].append(0.0)
-
-        elif it > 0:
-            # Get previous one cause we are observing thus we no need to recompute it
-            self.optimal_outcome_values_during_trials[temporal_index].append(
-                self.optimal_outcome_values_during_trials[temporal_index][-1]
-            )
-            self.optimal_intervention_levels[temporal_index][best_es][it] = self.optimal_intervention_levels[
-                temporal_index
-            ][best_es][it - 1]
-            # The cost of observation is the same as the previous trial.
-            self.per_trial_cost[temporal_index].append(self.per_trial_cost[temporal_index][-1])
-
-    def _safe_optimization(self, temporal_index, exploration_set, bound_var=1e-02, bound_len=20.0):
-        if self.bo_model[temporal_index][exploration_set].model.kern.variance[0] < bound_var:
-            self.bo_model[temporal_index][exploration_set].model.kern.variance[0] = 1.0
-
-        if self.bo_model[temporal_index][exploration_set].model.kern.lengthscale[0] > bound_len:
-            self.bo_model[temporal_index][exploration_set].model.kern.lengthscale[0] = 1.0
-
-    def _get_updated_interventional_data(self, new_interventional_data_x, y_new, best_es, temporal_index):
-        data_x, data_y = check_reshape_add_data(
-            self.interventional_data_x,
-            self.interventional_data_y,
-            new_interventional_data_x,
-            y_new,
-            best_es,
-            temporal_index,
-        )
-        self.interventional_data_x[temporal_index][best_es] = data_x
-        self.interventional_data_y[temporal_index][best_es] = data_y
+    def _get_assigned_blanket(self, temporal_index):
+        if temporal_index > 0:
+            if self.optimal_assigned_blankets is not None:
+                assigned_blanket = self.optimal_assigned_blankets[temporal_index]
+            else:
+                assigned_blanket = self.assigned_blanket
+        else:
+            assigned_blanket = self.assigned_blanket
+        return assigned_blanket

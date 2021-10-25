@@ -11,6 +11,7 @@ from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
 from numpy import nan, squeeze
 from numpy.core.multiarray import ndarray
+from src.bases.root import Root
 from src.bases.root_test import RooTest
 from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
@@ -29,7 +30,7 @@ from src.utils.utilities import (
 from tqdm import trange
 
 
-class CBO(RooTest):
+class CBO(Root):
     def __init__(
         self,
         G: str,
@@ -104,7 +105,7 @@ class CBO(RooTest):
             assert self.ground_truth is not None, "Provide ground truth to plot surrogate models"
 
         # Walk through the graph, from left to right, i.e. the temporal dimension
-        for temporal_index in trange(self.total_timesteps, desc="Time index"):
+        for temporal_index in trange(self.T, desc="Time index"):
 
             if self.debug_mode:
                 print("\n\t\t\t\t###########################")

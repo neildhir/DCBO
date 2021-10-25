@@ -10,7 +10,6 @@ from numpy.core.numeric import nan
 from src.bayes_opt.cost_functions import define_costs
 from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
 from src.utils.sem_utils.emissions import fit_sem_emit_fncs, get_emissions_input_output_pairs
-from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
@@ -18,7 +17,6 @@ from src.utils.sequential_intervention_functions import (
 )
 from src.utils.utilities import (
     check_reshape_add_data,
-    convert_to_dict_of_temporal_lists,
     create_intervention_exploration_domain,
     initialise_DCBO_parameters_and_objects_filtering,
     initialise_global_outcome_dict_new,
@@ -39,12 +37,12 @@ class Root:
         make_sem_estimator: Callable,
         observation_samples: dict,
         intervention_domain: dict,
-        intervention_samples: dict = None,  # interventional data collected for specific intervention sets
+        intervention_samples: dict = None,
         exploration_sets: list = None,
         estimate_sem: bool = False,
         base_target_variable: str = "Y",
         task: str = "min",
-        cost_type: int = 1,  # There are multiple options here
+        cost_type: int = 1,
         use_mc: bool = False,
         number_of_trials=10,
         ground_truth: ndarray = None,
@@ -102,13 +100,13 @@ class Root:
             self.blank_val = -1e7  # Negative infinity
 
         # Instantiate blanket that will form final solution
-        (self.optimal_blanket, self.total_timesteps,) = make_sequential_intervention_dictionary(self.G)
+        self.optimal_blanket = make_sequential_intervention_dictionary(self.G, self.T)
 
         # Contains all values a assigned as the DCBO walks through the graph;
         # optimal intervention level are assigned at the same temporal level,
         # for which we then use spatial SEMs to predict the other variable levels on that time-slice.
         self.assigned_blanket = deepcopy(self.optimal_blanket)
-        self.empty_intervention_blanket, _ = make_sequential_intervention_dictionary(self.G)
+        self.empty_intervention_blanket = make_sequential_intervention_dictionary(self.G, self.T)
 
         # Canonical manipulative variables
         if manipulative_variables is None:
@@ -132,7 +130,7 @@ class Root:
         )
 
         # Objective function params
-        self.bo_model = {t: {es: None for es in self.exploration_sets} for t in range(self.total_timesteps)}
+        self.bo_model = {t: {es: None for es in self.exploration_sets} for t in range(self.T)}
 
         # Store true objective function
         self.ground_truth = ground_truth
@@ -145,11 +143,11 @@ class Root:
         self.variance_function = deepcopy(self.bo_model)
 
         # Store the dict for mean and var values computed in the acquisition function
-        self.mean_dict_store = {t: {es: {} for es in self.exploration_sets} for t in range(self.total_timesteps)}
+        self.mean_dict_store = {t: {es: {} for es in self.exploration_sets} for t in range(self.T)}
         self.var_dict_store = deepcopy(self.mean_dict_store)
 
         # For logging
-        self.sequence_of_interventions_during_trials = [[] for _ in range(self.total_timesteps)]
+        self.sequence_of_interventions_during_trials = [[] for _ in range(self.T)]
 
         # Initial optimal solutions
         if intervention_samples:
@@ -164,7 +162,7 @@ class Root:
                 self.exploration_sets,
                 intervention_samples,
                 self.base_target_variable,
-                self.total_timesteps,
+                self.T,
                 self.task,
                 index_name=0,
                 nr_interventions=None,  # There are interventions, we just don't sub-sample them.
@@ -181,17 +179,15 @@ class Root:
             len(initial_optimal_sequential_intervention_levels)
             == len(initial_optimal_target_values)
             == len(initial_optimal_sequential_intervention_levels)
-            == self.total_timesteps
+            == self.T
         )
 
         # Dict indexed by the global exploration sets, stores the best
-        self.outcome_values = initialise_global_outcome_dict_new(
-            self.total_timesteps, initial_optimal_target_values, self.blank_val
-        )
-        self.optimal_outcome_values_during_trials = [[] for _ in range(self.total_timesteps)]
+        self.outcome_values = initialise_global_outcome_dict_new(self.T, initial_optimal_target_values, self.blank_val)
+        self.optimal_outcome_values_during_trials = [[] for _ in range(self.T)]
 
         self.optimal_intervention_levels = initialise_optimal_intervention_level_list(
-            self.total_timesteps,
+            self.T,
             self.exploration_sets,
             initial_optimal_sequential_intervention_sets,
             initial_optimal_sequential_intervention_levels,
@@ -214,108 +210,17 @@ class Root:
         )
 
         # Optimisation specific parameters to initialise
-        self.trial_type = [[] for _ in range(self.total_timesteps)]  # If we observed or intervened during the trial
+        self.trial_type = [[] for _ in range(self.T)]  # If we observed or intervened during the trial
         self.cost_functions = define_costs(self.manipulative_variables, self.base_target_variable, cost_type)
-        self.per_trial_cost = [[] for _ in range(self.total_timesteps)]
-        self.optimal_intervention_sets = [None for _ in range(self.total_timesteps)]
+        self.per_trial_cost = [[] for _ in range(self.T)]
+        self.optimal_intervention_sets = [None for _ in range(self.T)]
 
         # Acquisition function specifics
         self.y_acquired = {es: None for es in self.exploration_sets}
         self.corresponding_x = deepcopy(self.y_acquired)
-        # Estimates of structural equation models [spatial models]
         self.estimate_sem = estimate_sem
         if self.estimate_sem:
             self.assigned_blanket_hat = deepcopy(self.optimal_blanket)
-
-    def _update_opt_params(self, it: int, temporal_index: int, best_es: tuple) -> None:
-
-        # When observed append previous optimal values for logs
-        # Outcome values at previous step
-        self.outcome_values[temporal_index].append(self.outcome_values[temporal_index][-1])
-
-        if it == 0:
-            # Special case for first time index
-            # Assign an outcome values that is the same as the initial value in first trial
-            self.optimal_outcome_values_during_trials[temporal_index].append(self.outcome_values[temporal_index][-1])
-
-            if self.interventional_data_x[temporal_index][best_es] is None:
-                self.optimal_intervention_levels[temporal_index][best_es][it] = nan
-
-            self.per_trial_cost[temporal_index].append(0.0)
-
-        elif it > 0:
-            # Get previous one cause we are observing thus we no need to recompute it
-            self.optimal_outcome_values_during_trials[temporal_index].append(
-                self.optimal_outcome_values_during_trials[temporal_index][-1]
-            )
-            self.optimal_intervention_levels[temporal_index][best_es][it] = self.optimal_intervention_levels[
-                temporal_index
-            ][best_es][it - 1]
-            # The cost of observation is the same as the previous trial.
-            self.per_trial_cost[temporal_index].append(self.per_trial_cost[temporal_index][-1])
-
-    def _plot_conditional_distributions(self, temporal_index, it):
-        print("Time:", temporal_index)
-        print("Iter:", it)
-        print("\n### Emissions ###\n")
-        for key in self.sem_emit_fncs[temporal_index]:
-            if len(key) == 1:
-                print("{}\n".format(key))
-                self.sem_emit_fncs[temporal_index][key].plot()
-                plt.show()
-
-        print("\n### Transmissions ###\n")
-        if callable(getattr(self.__class__, self.sem_trans_fncs)):
-            for key in self.sem_trans_fncs.keys():
-                if len(key) == 1:
-                    print(key)
-                    self.sem_trans_fncs[key].plot()
-                    plt.show()
-
-    def _check_optimization_results(self, temporal_index):
-        # Check everything went well with the trials
-        assert len(self.optimal_outcome_values_during_trials[temporal_index]) == self.number_of_trials, (
-            len(self.optimal_outcome_values_during_trials[temporal_index]),
-            self.number_of_trials,
-        )
-        assert len(self.per_trial_cost[temporal_index]) == self.number_of_trials, len(self.per_trial_cost)
-
-        if temporal_index > 0:
-            assert all(
-                len(self.optimal_intervention_levels[temporal_index][es]) == self.number_of_trials
-                for es in self.exploration_sets
-            ), [len(self.optimal_intervention_levels[temporal_index][es]) for es in self.exploration_sets]
-
-        assert self.optimal_intervention_sets[temporal_index] is not None, (
-            self.optimal_intervention_sets,
-            self.optimal_intervention_levels,
-            temporal_index,
-        )
-
-    def _check_new_point(self, best_es, temporal_index):
-        assert best_es is not None, (best_es, self.y_acquired)
-        assert best_es in self.exploration_sets
-
-        # Check that new intervenƒtion point is in the allowed intervention domain
-        assert self.intervention_exploration_domain[best_es].check_points_in_domain(self.corresponding_x[best_es])[0], (
-            best_es,
-            temporal_index,
-            self.y_acquired,
-            self.corresponding_x,
-        )
-
-    def _get_updated_interventional_data(self, new_interventional_data_x, y_new, best_es, temporal_index):
-        data_x, data_y = check_reshape_add_data(
-            self.interventional_data_x,
-            self.interventional_data_y,
-            new_interventional_data_x,
-            y_new,
-            best_es,
-            temporal_index,
-        )
-
-        self.interventional_data_x[temporal_index][best_es] = data_x
-        self.interventional_data_y[temporal_index][best_es] = data_y
 
     def _plot_surrogate_model(self, temporal_index):
         # Plot model
@@ -353,64 +258,65 @@ class Root:
                 plt.legend()
                 plt.show()
 
-    def _update_observational_data(self, temporal_index):
+    def _update_opt_params(self, it: int, temporal_index: int, best_es: tuple) -> None:
+
+        # When observed append previous optimal values for logs
+        # Outcome values at previous step
+        self.outcome_values[temporal_index].append(self.outcome_values[temporal_index][-1])
+
+        if it == 0:
+            # Special case for first time index
+            # Assign outcome values that is the same as the initial value in first trial
+            self.optimal_outcome_values_during_trials[temporal_index].append(self.outcome_values[temporal_index][-1])
+
+            if self.interventional_data_x[temporal_index][best_es] is None:
+                self.optimal_intervention_levels[temporal_index][best_es][it] = nan
+
+            self.per_trial_cost[temporal_index].append(0.0)
+
+        elif it > 0:
+            # Get previous one cause we are observing thus we no need to recompute it
+            self.optimal_outcome_values_during_trials[temporal_index].append(
+                self.optimal_outcome_values_during_trials[temporal_index][-1]
+            )
+            self.optimal_intervention_levels[temporal_index][best_es][it] = self.optimal_intervention_levels[
+                temporal_index
+            ][best_es][it - 1]
+            # The cost of observation is the same as the previous trial.
+            self.per_trial_cost[temporal_index].append(self.per_trial_cost[temporal_index][-1])
+
+    def _check_new_point(self, best_es, temporal_index):
+        assert best_es is not None, (best_es, self.y_acquired)
+        assert best_es in self.exploration_sets
+
+        # Check that new intervenƒtion point is in the allowed intervention domain
+        assert self.intervention_exploration_domain[best_es].check_points_in_domain(self.corresponding_x[best_es])[0], (
+            best_es,
+            temporal_index,
+            self.y_acquired,
+            self.corresponding_x,
+        )
+
+    def _check_optimization_results(self, temporal_index):
+        # Check everything went well with the trials
+        assert len(self.optimal_outcome_values_during_trials[temporal_index]) == self.number_of_trials, (
+            len(self.optimal_outcome_values_during_trials[temporal_index]),
+            self.number_of_trials,
+        )
+        assert len(self.per_trial_cost[temporal_index]) == self.number_of_trials, len(self.per_trial_cost)
+
         if temporal_index > 0:
-            if self.online:
-                if isinstance(self.n_obs_t, list):
-                    local_n_t = self.n_obs_t[temporal_index]
-                else:
-                    local_n_t = self.n_obs_t
-                assert local_n_t is not None
+            assert all(
+                len(self.optimal_intervention_levels[temporal_index][es]) == self.number_of_trials
+                for es in self.exploration_sets
+            ), [len(self.optimal_intervention_levels[temporal_index][es]) for es in self.exploration_sets]
 
-                # Sample new data
-                set_observational_samples = sequentially_sample_model(
-                    static_sem=self.true_initial_sem,
-                    dynamic_sem=self.true_sem,
-                    total_timesteps=temporal_index + 1,
-                    sample_count=local_n_t,
-                    use_sem_estimate=False,
-                    interventions=self.assigned_blanket,
-                )
+        assert self.optimal_intervention_sets[temporal_index] is not None, (
+            self.optimal_intervention_sets,
+            self.optimal_intervention_levels,
+            temporal_index,
+        )
 
-                # Reshape data
-                set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
-
-                for var in self.observational_samples.keys():
-                    self.observational_samples[var][temporal_index] = set_observational_samples[var][temporal_index]
-            else:
-                if isinstance(self.n_obs_t, list):
-                    local_n_obs = self.n_obs_t[temporal_index]
-
-                    n_stored_observations = len(
-                        self.observational_samples[list(self.observational_samples.keys())[0]][temporal_index]
-                    )
-
-                    if self.online is False and local_n_obs != n_stored_observations:
-                        # We already have the same number of observations stored
-                        set_observational_samples = sequentially_sample_model(
-                            static_sem=self.true_initial_sem,
-                            dynamic_sem=self.true_sem,
-                            total_timesteps=temporal_index + 1,
-                            sample_count=local_n_obs,
-                            use_sem_estimate=False,
-                        )
-                        # Reshape data
-                        set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
-
-                        for var in self.observational_samples.keys():
-                            self.observational_samples[var][temporal_index] = set_observational_samples[var][
-                                temporal_index
-                            ]
-
-    def _get_assigned_blanket(self, temporal_index):
-        if temporal_index > 0:
-            if self.optimal_assigned_blankets is not None:
-                assigned_blanket = self.optimal_assigned_blankets[temporal_index]
-            else:
-                assigned_blanket = self.assigned_blanket_hat
-        else:
-            assigned_blanket = self.assigned_blanket_hat
-        return assigned_blanket
 
     def _safe_optimization(self, temporal_index, exploration_set, bound_var=1e-02, bound_len=20.0):
         if self.bo_model[temporal_index][exploration_set].model.kern.variance[0] < bound_var:
@@ -418,3 +324,33 @@ class Root:
 
         if self.bo_model[temporal_index][exploration_set].model.kern.lengthscale[0] > bound_len:
             self.bo_model[temporal_index][exploration_set].model.kern.lengthscale[0] = 1.0
+
+    def _get_updated_interventional_data(self, new_interventional_data_x, y_new, best_es, temporal_index):
+        data_x, data_y = check_reshape_add_data(
+            self.interventional_data_x,
+            self.interventional_data_y,
+            new_interventional_data_x,
+            y_new,
+            best_es,
+            temporal_index,
+        )
+        self.interventional_data_x[temporal_index][best_es] = data_x
+        self.interventional_data_y[temporal_index][best_es] = data_y
+
+    def _plot_conditional_distributions(self, temporal_index, it):
+        print("Time:", temporal_index)
+        print("Iter:", it)
+        print("\n### Emissions ###\n")
+        for key in self.sem_emit_fncs[temporal_index]:
+            if len(key) == 1:
+                print("{}\n".format(key))
+                self.sem_emit_fncs[temporal_index][key].plot()
+                plt.show()
+
+        print("\n### Transmissions ###\n")
+        if callable(getattr(self.__class__, self.sem_trans_fncs)):
+            for key in self.sem_trans_fncs.keys():
+                if len(key) == 1:
+                    print(key)
+                    self.sem_trans_fncs[key].plot()
+                    plt.show()

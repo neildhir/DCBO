@@ -11,6 +11,7 @@ from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
 from src.utils.gp_utils import update_sufficient_statistics, update_sufficient_statistics_hat
+from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.utilities import (
     assign_blanket,
     assign_blanket_hat,
@@ -102,7 +103,7 @@ class DCBO(BaseClassDCBO):
             assert self.ground_truth is not None, "Provide ground truth to plot"
 
         # Walk through the graph, from left to right, i.e. the temporal dimension
-        for temporal_index in trange(self.total_timesteps, desc="Time index"):
+        for temporal_index in trange(self.T, desc="Time index"):
 
             if self.debug_mode:
                 print("\n\t\t\t\t###########################")
@@ -484,3 +485,61 @@ class DCBO(BaseClassDCBO):
 
         self._safe_optimization(temporal_index, exploration_set)
 
+    def _update_observational_data(self, temporal_index):
+        if temporal_index > 0:
+            if self.online:
+                if isinstance(self.n_obs_t, list):
+                    local_n_t = self.n_obs_t[temporal_index]
+                else:
+                    local_n_t = self.n_obs_t
+                assert local_n_t is not None
+
+                # Sample new data
+                set_observational_samples = sequentially_sample_model(
+                    static_sem=self.true_initial_sem,
+                    dynamic_sem=self.true_sem,
+                    total_timesteps=temporal_index + 1,
+                    sample_count=local_n_t,
+                    use_sem_estimate=False,
+                    interventions=self.assigned_blanket,
+                )
+
+                # Reshape data
+                set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
+
+                for var in self.observational_samples.keys():
+                    self.observational_samples[var][temporal_index] = set_observational_samples[var][temporal_index]
+            else:
+                if isinstance(self.n_obs_t, list):
+                    local_n_obs = self.n_obs_t[temporal_index]
+
+                    n_stored_observations = len(
+                        self.observational_samples[list(self.observational_samples.keys())[0]][temporal_index]
+                    )
+
+                    if self.online is False and local_n_obs != n_stored_observations:
+                        # We already have the same number of observations stored
+                        set_observational_samples = sequentially_sample_model(
+                            static_sem=self.true_initial_sem,
+                            dynamic_sem=self.true_sem,
+                            total_timesteps=temporal_index + 1,
+                            sample_count=local_n_obs,
+                            use_sem_estimate=False,
+                        )
+                        # Reshape data
+                        set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
+
+                        for var in self.observational_samples.keys():
+                            self.observational_samples[var][temporal_index] = set_observational_samples[var][
+                                temporal_index
+                            ]
+
+    def _get_assigned_blanket(self, temporal_index):
+        if temporal_index > 0:
+            if self.optimal_assigned_blankets is not None:
+                assigned_blanket = self.optimal_assigned_blankets[temporal_index]
+            else:
+                assigned_blanket = self.assigned_blanket_hat
+        else:
+            assigned_blanket = self.assigned_blanket_hat
+        return assigned_blanket

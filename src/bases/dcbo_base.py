@@ -264,7 +264,7 @@ class BaseClassDCBO(Root):
                         out = sequential_sample_from_complex_model_hat(
                             static_sem=self.static_sem,
                             dynamic_sem=self.sem,
-                            timesteps=self.total_timesteps,
+                            timesteps=self.T,
                             interventions=this_blanket,
                             node_parents=self.node_parents,
                         )

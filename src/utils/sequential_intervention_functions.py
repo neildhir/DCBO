@@ -62,7 +62,7 @@ def evaluate_target_function(
     initial_structural_equation_model, structural_equation_model, graph, exploration_set: tuple, all_vars, T: int,
 ):
     # Initialise temporal intervention dictionary
-    intervention_blanket, total_timesteps = make_sequential_intervention_dictionary(graph)
+    intervention_blanket = make_sequential_intervention_dictionary(graph, T)
     keys = intervention_blanket.keys()
 
     def compute_target_function(current_target: str, intervention_levels: np.array, assigned_blanket: dict):
@@ -73,7 +73,7 @@ def evaluate_target_function(
 
         # Populate the blanket in place
         if target_temporal_index == 0:
-            intervention_blanket = reproduce_empty_intervention_blanket(total_timesteps, keys)
+            intervention_blanket = reproduce_empty_intervention_blanket(T, keys)
             assign_initial_intervention_level(
                 exploration_set=exploration_set,
                 intervention_level=intervention_levels,
@@ -95,7 +95,7 @@ def evaluate_target_function(
         interventional_samples = sequential_sample_from_model(
             static_sem=initial_structural_equation_model,
             dynamic_sem=structural_equation_model,
-            timesteps=total_timesteps,
+            timesteps=T,
             epsilon=static_noise_model,
             interventions=intervention_blanket,
         )
@@ -121,7 +121,7 @@ def compute_sequential_target_function(
     return intervention_samples[target_variable][temporal_index]
 
 
-def make_sequential_intervention_dictionary(graph):
+def make_sequential_intervention_dictionary(graph, time_series_length):
     """
     Makes an intervention dictionary so that we know _where_ (var) and _when_ (time step) to
     intervene and with what magnitude
@@ -138,5 +138,4 @@ def make_sequential_intervention_dictionary(graph):
     """
     G = "".join(graph.nodes)
     variables = sorted(set([s for s in G if s.isalpha()]))
-    time_series_length = max([int(s) for s in G if s.isdigit()]) + 1
-    return {v: time_series_length * [None] for v in variables}, time_series_length
+    return {v: time_series_length * [None] for v in variables}
