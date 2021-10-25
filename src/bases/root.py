@@ -9,6 +9,7 @@ from numpy.core.multiarray import ndarray
 from numpy.core.numeric import nan
 from src.bayes_opt.cost_functions import define_costs
 from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
+from src.utils.gp_utils import update_sufficient_statistics, update_sufficient_statistics_hat
 from src.utils.sem_utils.emissions import fit_sem_emit_fncs, get_emissions_input_output_pairs
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
@@ -357,3 +358,60 @@ class Root:
                     print(key)
                     self.sem_trans_fncs[key].plot()
                     plt.show()
+
+    def _update_sufficient_statistics(
+        self, target: str, temporal_index: int, dynamic: bool, assigned_blanket: dict, updated_sem=None
+    ) -> None:
+        """
+        Method to update mean and variance functions of the causal prior (GP).
+
+        Parameters
+        ----------
+        target : str
+            The full node name of the target variable.
+        temporal_index : int
+            The temporal index currently being explored by the algorithm.
+        dynamic : bool
+            Tells the algorithms whether or not to use horizontal information (i.e. transition information between temporal slices).
+        assigned_blanket : dict
+            The assigned values thus far, per time-slice, per node in the CGM.
+        updated_sem : [type], optional
+            Structural equations model.
+        """
+
+        # Check which current target we are dealing with, and in consequence where we are in time
+        target_variable, target_temporal_index = target.split("_")
+        assert int(target_temporal_index) == temporal_index
+
+        for es in self.exploration_sets:
+            #  Use estimates of sem
+            if self.estimate_sem:
+                (
+                    self.mean_function[temporal_index][es],
+                    self.variance_function[temporal_index][es],
+                ) = update_sufficient_statistics_hat(
+                    temporal_index,
+                    target_variable,
+                    es,
+                    updated_sem,
+                    self.node_parents,
+                    dynamic=dynamic,
+                    assigned_blanket=assigned_blanket,
+                    mean_dict_store=self.mean_dict_store,
+                    var_dict_store=self.var_dict_store,
+                )
+            # Use true sem
+            else:
+                # At the first time-slice we do not have any previous fixed interventions to consider.
+                (
+                    self.mean_function[temporal_index][es],
+                    self.variance_function[temporal_index][es],
+                ) = update_sufficient_statistics(
+                    temporal_index,
+                    es,
+                    self.node_children,
+                    self.true_initial_sem,
+                    self.true_sem,
+                    dynamic=dynamic,
+                    assigned_blanket=assigned_blanket,  # At t=0 this is a dummy variable as it has not been assigned yet.
+                )

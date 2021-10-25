@@ -414,46 +414,6 @@ class BaseClassDCBO(Root):
                 seed_anchor_points=seed_to_pass,
             )
 
-    def _update_sufficient_statistics(
-        self, target: str, temporal_index: int, updated_sem, assigned_blanket: dict
-    ) -> None:
-        # Check which current target we are dealing with, and in consequence where we are in time
-        target_variable, target_temporal_index = target.split("_")
-        assert int(target_temporal_index) == temporal_index
-
-        for es in self.exploration_sets:
-            #  Use estimates of sem
-            if self.estimate_sem:
-                (
-                    self.mean_function[temporal_index][es],
-                    self.variance_function[temporal_index][es],
-                ) = update_sufficient_statistics_hat(
-                    temporal_index,
-                    target_variable,
-                    es,
-                    updated_sem,
-                    self.node_parents,
-                    dynamic=True,
-                    assigned_blanket=assigned_blanket,
-                    mean_dict_store=self.mean_dict_store,
-                    var_dict_store=self.var_dict_store,
-                )
-            # Use true sem
-            else:
-                # At the first time-slice we do not have any previous fixed interventions to consider.
-                (
-                    self.mean_function[temporal_index][es],
-                    self.variance_function[temporal_index][es],
-                ) = update_sufficient_statistics(
-                    temporal_index,
-                    es,
-                    self.node_children,
-                    self.true_initial_sem,
-                    self.true_sem,
-                    dynamic=True,
-                    assigned_blanket=self.assigned_blanket,
-                )
-
     def _update_bo_model(
         self,
         temporal_index: int,

@@ -162,7 +162,14 @@ class DCBO(BaseClassDCBO):
                     self.sem = sem_hat().dynamic(moment=0)  # for t > 0
 
                     # New mean functions and var functions given the observational data. This updates the prior.
-                    self._update_sufficient_statistics(target, temporal_index, sem_hat, assigned_blanket)
+                    self._update_sufficient_statistics(
+                        target=target,
+                        temporal_index=temporal_index,
+                        dynamic=True,
+                        assigned_blanket=assigned_blanket,
+                        updated_sem=sem_hat,
+                    )
+                    # self._update_sufficient_statistics(target, temporal_index, sem_hat, assigned_blanket)
 
                     # Update optimisation related parameters
                     self._update_opt_params(it, temporal_index, best_es)

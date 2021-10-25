@@ -152,7 +152,13 @@ class CBO(Root):
                         sem_hat = None
 
                     # Create mean functions and var functions given the observational data. This updates the prior.
-                    self._update_sufficient_statistics(target, temporal_index, sem_hat)
+                    self._update_sufficient_statistics(
+                        target=target,
+                        temporal_index=temporal_index,
+                        dynamic=False,
+                        assigned_blanket=self.empty_intervention_blanket,
+                        updated_sem=sem_hat,
+                    )
                     # Update optimisation related parameters
                     self._update_opt_params(it, temporal_index, best_es)
 
@@ -380,46 +386,6 @@ class CBO(Root):
                 # Update in-place
                 self.sem_emit_fncs[temporal_index][inputs].set_XY(X=xx, Y=yy)
                 self.sem_emit_fncs[temporal_index][inputs].optimize()
-
-    def _update_sufficient_statistics(self, target: str, temporal_index: int, updated_sem=None) -> None:
-
-        # Check which current target we are dealing with, and in consequence where we are in time
-        target_variable, target_temporal_index = target.split("_")
-        assert int(target_temporal_index) == temporal_index
-        blanket = self.empty_intervention_blanket
-
-        for es in self.exploration_sets:
-            #  Use estimates of sem
-            if self.estimate_sem:
-                (
-                    self.mean_function[temporal_index][es],
-                    self.variance_function[temporal_index][es],
-                ) = update_sufficient_statistics_hat(
-                    temporal_index,
-                    target_variable,
-                    es,
-                    updated_sem,
-                    self.node_parents,
-                    dynamic=False,
-                    assigned_blanket=blanket,
-                    mean_dict_store=self.mean_dict_store,
-                    var_dict_store=self.var_dict_store,
-                )
-            # Use true sem
-            else:
-                # At the first time-slice we do not have any previous fixed interventions to consider.
-                (
-                    self.mean_function[temporal_index][es],
-                    self.variance_function[temporal_index][es],
-                ) = update_sufficient_statistics(
-                    temporal_index,
-                    es,
-                    self.node_children,
-                    self.true_initial_sem,
-                    self.true_sem,
-                    dynamic=False,
-                    assigned_blanket=blanket,  # At t=0 this is a dummy variable as it has not been assigned yet.
-                )
 
     def _update_bo_model(
         self, temporal_index: int, exploration_set: tuple, alpha: float = 2, beta: float = 0.5,
