@@ -13,6 +13,7 @@ from GPy.models import GPRegression
 from numpy import nan, squeeze
 from numpy.core.multiarray import ndarray
 from src.bases.cbo_base import BaseClassCBO
+from src.bases.root_test import RooTest
 from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
@@ -30,7 +31,8 @@ from src.utils.utilities import (
 from tqdm import trange
 
 
-class OLDCBO(BaseClassCBO):
+# class OLDCBO(BaseClassCBO):
+class OLDCBO(RooTest):
     def __init__(
         self,
         G: str,
@@ -62,29 +64,30 @@ class OLDCBO(BaseClassCBO):
         manipulative_variables=None,
         change_points: list = None,
     ):
-        super().__init__(
-            G,
-            sem,
-            make_sem_hat,
-            observational_samples,
-            intervention_domain,
-            interventional_samples,
-            exploration_sets,
-            number_of_trials,
-            base_target_variable,
-            ground_truth,
-            estimate_sem,
-            task,
-            n_restart,
-            cost_type,
-            use_mc,
-            debug_mode,
-            online,
-            num_anchor_points,
-            args_sem,
-            manipulative_variables,
-            change_points,
-        )
+        args = {
+            "G": G,
+            "sem": sem,
+            "make_sem_hat": make_sem_hat,
+            "observational_samples": observational_samples,
+            "intervention_domain": intervention_domain,
+            "interventional_samples": interventional_samples,
+            "exploration_sets": exploration_sets,
+            "estimate_sem": estimate_sem,
+            "base_target_variable": base_target_variable,
+            "task": task,
+            "cost_type": cost_type,
+            "use_mc": use_mc,
+            "number_of_trials": number_of_trials,
+            "ground_truth": ground_truth,
+            "n_restart": n_restart,
+            "debug_mode": debug_mode,
+            "online": online,
+            "num_anchor_points": num_anchor_points,
+            "args_sem": args_sem,
+            "manipulative_variables": manipulative_variables,
+            "change_points": change_points,
+        }
+        super().__init__(**args)
         self.concat = concat
         self.optimal_assigned_blankets = optimal_assigned_blankets
         self.n_obs_t = n_obs_t

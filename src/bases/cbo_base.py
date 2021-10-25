@@ -31,7 +31,7 @@ class BaseClassCBO:
         make_sem_hat: Callable,
         observational_samples: dict,
         intervention_domain: dict,
-        interventional_samples: dict = None,  # interventional data collected for specific intervention sets
+        interventional_samples: dict = None,
         exploration_sets: list = None,
         number_of_trials=10,
         base_target_variable: str = "Y",
@@ -39,7 +39,7 @@ class BaseClassCBO:
         estimate_sem: bool = False,
         task: str = "min",
         n_restart: int = 1,
-        cost_type: int = 1,  # There are multiple options here
+        cost_type: int = 1,
         use_mc: bool = False,
         debug_mode: bool = False,
         online: bool = False,

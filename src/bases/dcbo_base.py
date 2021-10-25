@@ -6,7 +6,6 @@ from copy import deepcopy
 
 import numpy as np
 from src.utils.gp_utils import fit_gp, sequential_sample_from_complex_model_hat
-from src.utils.sem_utils.emissions import fit_sem_emit_fncs
 from src.utils.sem_utils.transitions import fit_sem_trans_fncs, get_transition_input_output_pairs
 from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
 from src.utils.utilities import make_column_shape_2D
@@ -69,8 +68,8 @@ class BaseClassDCBO(Root):
         super().__init__(**root_args)
 
         self.transfer_pairs = get_transition_input_output_pairs(self.node_parents)
+        # The fit emission function lives in the main class of the method
         self.sem_trans_fncs = fit_sem_trans_fncs(self.observational_samples, self.transfer_pairs)
-
         self.time_indexed_trans_fncs_inputs = {t: [] for t in range(1, self.T)}
         for t in range(1, self.T):
             for key in self.transfer_pairs.keys():

@@ -36,15 +36,15 @@ class RooTest:
         self,
         G: str,
         sem: classmethod,
-        make_sem_estimator: Callable,
-        observation_samples: dict,
+        make_sem_hat: Callable,
+        observational_samples: dict,
         intervention_domain: dict,
-        intervention_samples: dict = None,  # interventional data collected for specific intervention sets
+        interventional_samples: dict = None,
         exploration_sets: list = None,
         estimate_sem: bool = False,
         base_target_variable: str = "Y",
         task: str = "min",
-        cost_type: int = 1,  # There are multiple options here
+        cost_type: int = 1,
         use_mc: bool = False,
         number_of_trials=10,
         ground_truth: list = None,
@@ -66,7 +66,7 @@ class RooTest:
         # These will be used in the target function evaluation
         self.true_initial_sem = true_sem.static()  # for t = 0
         self.true_sem = true_sem.dynamic()  # for t > 0
-        self.make_sem_hat = make_sem_estimator
+        self.make_sem_hat = make_sem_hat
 
         assert isinstance(G, MultiDiGraph)
         self.G = G
@@ -77,14 +77,14 @@ class RooTest:
         self.use_mc = use_mc
 
         # Total time-steps and sample count per time-step
-        _, self.T = observation_samples[list(observation_samples.keys())[0]].shape
-        self.observational_samples = observation_samples
+        _, self.T = observational_samples[list(observational_samples.keys())[0]].shape
+        self.observational_samples = observational_samples
         self.base_target_variable = base_target_variable  # This has to be reflected in the CGM
         self.index_name = 0
         self.number_of_trials = number_of_trials
 
         #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
-        time_slice_vars = observation_samples.keys()
+        time_slice_vars = observational_samples.keys()
         self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
         #  Checks what vars in DAG (if any) are independent causes
         self.independent_causes = get_independent_causes(time_slice_vars, G)
@@ -152,7 +152,7 @@ class RooTest:
         self.sequence_of_interventions_during_trials = [[] for _ in range(self.total_timesteps)]
 
         # Initial optimal solutions
-        if intervention_samples:
+        if interventional_samples:
             # Provide initial interventional data
             (
                 initial_optimal_sequential_intervention_sets,
@@ -162,7 +162,7 @@ class RooTest:
                 self.interventional_data_y,
             ) = initialise_DCBO_parameters_and_objects_filtering(
                 self.exploration_sets,
-                intervention_samples,
+                interventional_samples,
                 self.base_target_variable,
                 self.total_timesteps,
                 self.task,
@@ -225,90 +225,3 @@ class RooTest:
         self.estimate_sem = estimate_sem
         if self.estimate_sem:
             self.assigned_blanket_hat = deepcopy(self.optimal_blanket)
-
-    def _plot_conditional_distributions(self, temporal_index, it):
-        print("Time:", temporal_index)
-        print("Iter:", it)
-        print("\n### Emissions ###\n")
-        for key in self.sem_emit_fncs[temporal_index]:
-            if len(key) == 1:
-                print("{}\n".format(key))
-                self.sem_emit_fncs[temporal_index][key].plot()
-                plt.show()
-
-        print("\n### Transmissions ###\n")
-        if callable(getattr(self.__class__, self.sem_trans_fncs)):
-            for key in self.sem_trans_fncs.keys():
-                if len(key) == 1:
-                    print(key)
-                    self.sem_trans_fncs[key].plot()
-                    plt.show()
-
-    def _check_optimization_results(self, temporal_index):
-        # Check everything went well with the trials
-        assert len(self.optimal_outcome_values_during_trials[temporal_index]) == self.number_of_trials, (
-            len(self.optimal_outcome_values_during_trials[temporal_index]),
-            self.number_of_trials,
-        )
-        assert len(self.per_trial_cost[temporal_index]) == self.number_of_trials, len(self.per_trial_cost)
-
-        if temporal_index > 0:
-            assert all(
-                len(self.optimal_intervention_levels[temporal_index][es]) == self.number_of_trials
-                for es in self.exploration_sets
-            ), [len(self.optimal_intervention_levels[temporal_index][es]) for es in self.exploration_sets]
-
-        assert self.optimal_intervention_sets[temporal_index] is not None, (
-            self.optimal_intervention_sets,
-            self.optimal_intervention_levels,
-            temporal_index,
-        )
-
-    def _check_new_point(self, best_es, temporal_index):
-        assert best_es is not None, (best_es, self.y_acquired)
-        assert best_es in self.exploration_sets
-
-        # Check that new intervenƒtion point is in the allowed intervention domain
-        assert self.intervention_exploration_domain[best_es].check_points_in_domain(self.corresponding_x[best_es])[0], (
-            best_es,
-            temporal_index,
-            self.y_acquired,
-            self.corresponding_x,
-        )
-
-    def _plot_surrogate_model(self, temporal_index):
-        # Plot model
-        for es in self.exploration_sets:
-            if len(es) == 1:
-                inputs = np.asarray(self.interventional_grids[es])
-
-                if self.bo_model[temporal_index][es] is not None:
-                    mean, var = self.bo_model[temporal_index][es].predict(self.interventional_grids[es])
-                    print("\n\t\t[1] The BO model exists for ES: {} at t == {}.\n".format(es, temporal_index))
-                    print("Assigned blanket", self.assigned_blanket)
-                else:
-                    mean = self.mean_function[temporal_index][es](self.interventional_grids[es])
-                    var = self.variance_function[temporal_index][es](self.interventional_grids[es]) + np.ones_like(
-                        self.variance_function[temporal_index][es](self.interventional_grids[es])
-                    )
-                    print("\n\t\t[0] The BO model does not exists for ES: {} at t == {}.\n".format(es, temporal_index))
-                    print("Assigned blanket", self.assigned_blanket)
-
-                true = make_column_shape_2D(self.ground_truth[temporal_index][es])
-
-                if (
-                    self.interventional_data_x[temporal_index][es] is not None
-                    and self.interventional_data_y[temporal_index][es] is not None
-                ):
-                    plt.scatter(
-                        self.interventional_data_x[temporal_index][es], self.interventional_data_y[temporal_index][es],
-                    )
-
-                plt.fill_between(inputs[:, 0], (mean - var)[:, 0], (mean + var)[:, 0], alpha=0.2)
-                plt.plot(
-                    inputs, mean, "b", label="$do{}$ at $t={}$".format(es, temporal_index),
-                )
-                plt.plot(inputs, true, "r", label="True at $t={}$".format(temporal_index))
-                plt.legend()
-                plt.show()
-

@@ -18,9 +18,9 @@ def make_graphical_model(
     stop : int
         Index of the last time-step
     topology: str, optional
-        Choice of (spatial, i.e. per time-slice) topology
+        Choice of independent and dependent causal topology
     nodes: list
-        List containing all the nodes in the CGM
+        List containing the nodes of the time-slice of the CGM e.g. nodes=['X', 'Z', 'Y']
     target_node: str, optional
         If we are using a independent spatial topology then we need to specify the target node
     verbose : bool, optional
@@ -28,13 +28,8 @@ def make_graphical_model(
 
     Returns
     -------
-    str
-        Returns the DOT format of the graph
-
-    Raises
-    ------
-    ValueError
-        If an unknown topology is passed as argument.
+    Union[MultiDiGraph, str]
+        Returns the DOT format of the graph or a networkx object
     """
 
     assert start_time <= stop_time
@@ -114,7 +109,7 @@ def make_graphical_model(
 
 def get_independent_causes(time_slice_vars: List[str], G: MultiDiGraph) -> Dict[str, bool]:
     """
-    Function to find the "independent causes" in each time-slice. These are variables which have no dependence on the other nodes or on the past. But they are still part of endogenous model.
+    Function to find the "independent causes" in each time-slice. These are variables which have no dependence on the other nodes or on the past. But they are still part of endogenous model. They are potential instrument variables but can also just be nodes that affect the target-variable directly.
 
     Parameters
     ----------
@@ -138,7 +133,7 @@ def get_independent_causes(time_slice_vars: List[str], G: MultiDiGraph) -> Dict[
     # Check which nodes are independent singelton cause variables in both time-slices
     possible_singletons = [v.split("_")[0] for v in [key for key in gg if not gg_parents[key]]]
     singleton_causes = [v for v in set(possible_singletons) if possible_singletons.count(v) > 1]
-    #  Indicate found instrument
+    #  Indicate found singleton
     for v in singleton_causes:
         independent_causes[v] = True
 
@@ -147,7 +142,7 @@ def get_independent_causes(time_slice_vars: List[str], G: MultiDiGraph) -> Dict[
 
 def get_summary_graph_node_parents(time_slice_vars: List[str], G: MultiDiGraph) -> Tuple[Dict[str, tuple], List[str]]:
     """
-    FInds the summary graph of the DBN a la page 199 of `Elements of Causal Inference'.
+    Finds the summary graph of the DBN a la page 199 of `Elements of Causal Inference'.
 
     Parameters
     ----------
