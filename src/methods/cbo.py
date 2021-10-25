@@ -9,10 +9,9 @@ from GPy.core import Mapping
 from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
-from numpy import nan, squeeze
+from numpy import squeeze
 from numpy.core.multiarray import ndarray
 from src.bases.root import Root
-from src.bases.root_test import RooTest
 from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
@@ -21,7 +20,6 @@ from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.utilities import (
     assign_blanket,
     check_blanket,
-    check_reshape_add_data,
     convert_to_dict_of_temporal_lists,
     make_column_shape_2D,
     standard_mean_function,
@@ -62,7 +60,7 @@ class CBO(Root):
         manipulative_variables=None,
         change_points: list = None,
     ):
-        root_args = {
+        args = {
             "G": G,
             "sem": sem,
             "make_sem_estimator": make_sem_estimator,
@@ -85,7 +83,7 @@ class CBO(Root):
             "manipulative_variables": manipulative_variables,
             "change_points": change_points,
         }
-        super().__init__(**root_args)
+        super().__init__(**args)
 
         self.concat = concat
         self.optimal_assigned_blankets = optimal_assigned_blankets
@@ -123,14 +121,12 @@ class CBO(Root):
             self._update_observational_data(temporal_index=temporal_index)
             self._update_interventional_data(temporal_index=temporal_index)
 
-            # Get blanket to compute y_new
-            assigned_blanket = self._get_assigned_blanket(temporal_index)
-
             if temporal_index > 0 and (self.online or isinstance(self.n_obs_t, list)):
                 self._update_sem_emit_fncs(temporal_index)
 
             # Get blanket to compute y_new
             assigned_blanket = self._get_assigned_blanket(temporal_index)
+
             for it in range(self.number_of_trials):
 
                 if self.debug_mode:
@@ -485,43 +481,6 @@ class CBO(Root):
         self.bo_model[temporal_index][exploration_set] = GPyModelWrapper(model)
         self._safe_optimization(temporal_index, exploration_set)
 
-    def _update_opt_params(self, it: int, temporal_index: int, best_es: tuple) -> None:
-
-        # When observed append previous optimal values for logs
-        # Outcome values at previous step
-        self.outcome_values[temporal_index].append(self.outcome_values[temporal_index][-1])
-
-        if it == 0:
-            # Special case for first time index
-            # Assign an outcome values that is the same as the initial value in first trial
-            self.optimal_outcome_values_during_trials[temporal_index].append(self.outcome_values[temporal_index][-1])
-
-            if self.interventional_data_x[temporal_index][best_es] is None:
-                self.optimal_intervention_levels[temporal_index][best_es][it] = nan
-
-            self.per_trial_cost[temporal_index].append(0.0)
-
-        elif it > 0:
-            # Get previous one cause we are observing thus we no need to recompute it
-            self.optimal_outcome_values_during_trials[temporal_index].append(
-                self.optimal_outcome_values_during_trials[temporal_index][-1]
-            )
-            self.optimal_intervention_levels[temporal_index][best_es][it] = self.optimal_intervention_levels[
-                temporal_index
-            ][best_es][it - 1]
-            # The cost of observation is the same as the previous trial.
-            self.per_trial_cost[temporal_index].append(self.per_trial_cost[temporal_index][-1])
-
-    def _get_assigned_blanket(self, temporal_index):
-        if temporal_index > 0:
-            if self.optimal_assigned_blankets is not None:
-                assigned_blanket = self.optimal_assigned_blankets[temporal_index]
-            else:
-                assigned_blanket = self.assigned_blanket_hat
-        else:
-            assigned_blanket = self.assigned_blanket_hat
-        return assigned_blanket
-
     def _update_observational_data(self, temporal_index):
         if temporal_index > 0:
             if self.online:
@@ -571,22 +530,12 @@ class CBO(Root):
                                 temporal_index
                             ]
 
-    def _get_updated_interventional_data(self, new_interventional_data_x, y_new, best_es, temporal_index):
-        data_x, data_y = check_reshape_add_data(
-            self.interventional_data_x,
-            self.interventional_data_y,
-            new_interventional_data_x,
-            y_new,
-            best_es,
-            temporal_index,
-        )
-
-        self.interventional_data_x[temporal_index][best_es] = data_x
-        self.interventional_data_y[temporal_index][best_es] = data_y
-
-    def _safe_optimization(self, temporal_index, exploration_set, bound_var=1e-02, bound_len=20.0):
-        if self.bo_model[temporal_index][exploration_set].model.kern.variance[0] < bound_var:
-            self.bo_model[temporal_index][exploration_set].model.kern.variance[0] = 1.0
-
-        if self.bo_model[temporal_index][exploration_set].model.kern.lengthscale[0] > bound_len:
-            self.bo_model[temporal_index][exploration_set].model.kern.lengthscale[0] = 1.0
+    def _get_assigned_blanket(self, temporal_index):
+        if temporal_index > 0:
+            if self.optimal_assigned_blankets is not None:
+                assigned_blanket = self.optimal_assigned_blankets[temporal_index]
+            else:
+                assigned_blanket = self.assigned_blanket
+        else:
+            assigned_blanket = self.assigned_blanket
+        return assigned_blanket
