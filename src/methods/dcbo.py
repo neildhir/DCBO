@@ -169,7 +169,6 @@ class DCBO(BaseClassDCBO):
                         assigned_blanket=assigned_blanket,
                         updated_sem=sem_hat,
                     )
-                    # self._update_sufficient_statistics(target, temporal_index, sem_hat, assigned_blanket)
 
                     # Update optimisation related parameters
                     self._update_opt_params(it, temporal_index, best_es)
@@ -195,20 +194,16 @@ class DCBO(BaseClassDCBO):
                                 and self.interventional_data_y[temporal_index][es] is not None
                             ):
                                 self._update_bo_model(temporal_index, es)
-
                     if self.debug_mode:
                         self._plot_surrogate_model(temporal_index)
-
                     self.trial_type[temporal_index].append("i")
 
-                    # Compute acquisition function given the updated BO models for the interventional data.
-                    # Notice that we use current_global and the costs to compute the acquisition functions.
+                    # Compute acquisition function given the updated BO models for the interventional data. Notice that we use current_global and the costs to compute the acquisition functions.
                     self._evaluate_acquisition_functions(temporal_index, current_best_global_target, it)
 
                     # Best exploration set based on acquired target-values
                     best_es = eval("max")(self.y_acquired, key=self.y_acquired.get)
                     new_interventional_data_x = self.corresponding_x[best_es]
-
                     self._check_new_point(best_es, temporal_index)
 
                     # Compute target value for selected intervention

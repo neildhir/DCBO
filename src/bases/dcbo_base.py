@@ -14,13 +14,10 @@ from src.bayes_opt.intervention_computations import evaluate_acquisition_functio
 from src.utils.gp_utils import (
     fit_gp,
     sequential_sample_from_complex_model_hat,
-    update_sufficient_statistics,
-    update_sufficient_statistics_hat,
 )
 from src.utils.sem_utils.transitions import fit_sem_trans_fncs, get_transition_input_output_pairs
-from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
-from src.utils.utilities import convert_to_dict_of_temporal_lists, make_column_shape_2D
+from src.utils.utilities import make_column_shape_2D
 
 from .root import Root
 

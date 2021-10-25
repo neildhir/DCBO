@@ -12,34 +12,15 @@ This paper studies the problem of performing a sequence of optimal interventions
     <img width="70%" src="figures/quadrant.png">
 </p>
 
-## Authors
+### Authors
 
 [Virginia Aglietti](https://uk.linkedin.com/in/virginia-aglietti-a80321a4), [Neil Dhir](https://neildhir.github.io/), [Javier Gonzalez](https://javiergonzalezh.github.io/) and [Theodoros Damoulas](https://warwick.ac.uk/fac/sci/statistics/staff/academic-research/damoulas/)
 
-## TODO
+## Requirements
 
-- Write tutorials
-
-- Check license
-
-- Parallelise sampling functions so that they are not sequential, that is far too slow
-
-- Implement KDE for proper handling of exogenous noise variables, as done in CEO
-
-- Consider start using Julia/Fortran for heavy matrix operations e.g. for acquisition function evaluation
-
-- For all classes, write optimal parameters with **kwargs instead, it is currently far too messy
-
-## Installation
-
-conda or pip
-
-### Requirements
-
-- python
-- numpy
-- scipy
-- networkx
+```[markdown]
+pip install -r requirements.txt
+```
 
 ## Demo and notebooks
 
@@ -77,4 +58,4 @@ You should have received a copy of the GNU General Public License along with thi
 
 ## Disclaimer
 
-This is research code. Written by researchers for researchers. We do not have enough time nor are we professional software engineers and are thus not equipped to make a (more) robust implementation. Consequently, things may break. If they do please do not be angry and instead let us know so we can fix them. Better yet, please contribute by submitting PRs to make this project better.
+This is research code. Written by researchers, for researchers. We do not have enough time nor are we professional software engineers and are thus not equipped to make a (more) robust implementation. Consequently, things may break. If they do please do not be angry. Instead, if you would like to contribute, find things that are broken or have any suggestions for this work, you can contact us at ndhir@turing.ac.uk or open an issue on this repository.

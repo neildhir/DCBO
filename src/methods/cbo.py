@@ -2,7 +2,6 @@
 Main CBO class.
 """
 from typing import Callable
-
 import numpy as np
 from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
 from GPy.core import Mapping
@@ -15,8 +14,7 @@ from src.bases.root import Root
 from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.gp_utils import fit_gp, update_sufficient_statistics, update_sufficient_statistics_hat
-from src.utils.sequential_causal_functions import sequentially_sample_model
+from src.utils.gp_utils import fit_gp
 from src.utils.utilities import (
     assign_blanket,
     check_blanket,
@@ -176,11 +174,8 @@ class CBO(Root):
                                 and self.interventional_data_y[temporal_index][es] is not None
                             ):
                                 self._update_bo_model(temporal_index, es)
-
-                    # Surrogate model
                     if self.debug_mode:
                         self._plot_surrogate_model(temporal_index)
-
                     self.trial_type[temporal_index].append("i")  # For 'i'ntervene
 
                     # Compute acquisition function
@@ -189,7 +184,6 @@ class CBO(Root):
                     # Best exploration set based on acquired target-values
                     best_es = eval("max")(self.y_acquired, key=self.y_acquired.get)
                     new_interventional_data_x = self.corresponding_x[best_es]
-
                     self._check_new_point(best_es, temporal_index)
 
                     # Compute target value for selected intervention
@@ -320,6 +314,7 @@ class CBO(Root):
                 seed_to_pass = None
             else:
                 seed_to_pass = int(self.seed_anchor_points * (temporal_index + 1) * it)
+
             (self.y_acquired[es], self.corresponding_x[es],) = evaluate_acquisition_function(
                 self.intervention_exploration_domain[es],
                 bo_model,
