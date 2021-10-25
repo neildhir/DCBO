@@ -57,7 +57,7 @@ class CBO(Root):
         sample_anchor_points: bool = False,
         seed_anchor_points=None,
         args_sem=None,
-        manipulative_variables=None,
+        manipulative_variables: list = None,
         change_points: list = None,
     ):
         args = {
@@ -164,8 +164,6 @@ class CBO(Root):
 
                     # Surrogate models
                     if self.trial_type[temporal_index][-1] == "o":
-                        # 1) If in the previous trial we observed, we _create_ new BO models
-                        # The mean functions and var functions computed via the DO calculus have changed
                         for es in self.exploration_sets:
                             if (
                                 self.interventional_data_x[temporal_index][es] is not None
@@ -173,11 +171,11 @@ class CBO(Root):
                             ):
                                 self._update_bo_model(temporal_index, es)
 
-                    self.trial_type[temporal_index].append("i")  # For 'i'ntervene
-
                     # Surrogate model
                     if self.debug_mode:
                         self._plot_surrogate_model(temporal_index)
+
+                    self.trial_type[temporal_index].append("i")  # For 'i'ntervene
 
                     # Compute acquisition function
                     self._evaluate_acquisition_functions(temporal_index, current_best_global_target, it)

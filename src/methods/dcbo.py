@@ -1,17 +1,11 @@
+"""
+Main DCBO class.
+"""
 from typing import Callable
-import numpy as np
-from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
-from GPy.core import Mapping
-from GPy.core.parameterization import priors
-from GPy.models import GPRegression
 from numpy import squeeze
 from numpy.core.multiarray import ndarray
 from src.bases.dcbo_base import BaseClassDCBO
-from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
-from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.gp_utils import update_sufficient_statistics, update_sufficient_statistics_hat
-from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.utilities import (
     assign_blanket,
     assign_blanket_hat,
@@ -47,7 +41,7 @@ class DCBO(BaseClassDCBO):
         transfer_hp_o: bool = False,
         transfer_hp_i: bool = False,
         hp_i_prior: bool = True,
-        n_obs_t=None,
+        n_obs_t: int = None,
         num_anchor_points=100,
         seed: int = 1,
         sample_anchor_points: bool = False,
@@ -158,17 +152,17 @@ class DCBO(BaseClassDCBO):
                     _, target_temporal_index = target.split("_")
                     assert int(target_temporal_index) == temporal_index
 
-                    new_sem_hat = self.make_sem_hat(
+                    sem_hat = self.make_sem_hat(
                         summary_graph_node_parents=self.summary_graph_node_parents,
                         emission_functions=self.sem_emit_fncs,
                         transition_functions=self.sem_trans_fncs,
                         independent_causes=self.independent_causes,
                     )
-                    self.static_sem = new_sem_hat().static(moment=0)  # for t = 0
-                    self.sem = new_sem_hat().dynamic(moment=0)  # for t > 0
+                    self.static_sem = sem_hat().static(moment=0)  # for t = 0
+                    self.sem = sem_hat().dynamic(moment=0)  # for t > 0
 
                     # New mean functions and var functions given the observational data. This updates the prior.
-                    self._update_sufficient_statistics(target, temporal_index, new_sem_hat, assigned_blanket)
+                    self._update_sufficient_statistics(target, temporal_index, sem_hat, assigned_blanket)
 
                     # Update optimisation related parameters
                     self._update_opt_params(it, temporal_index, best_es)
@@ -332,214 +326,3 @@ class DCBO(BaseClassDCBO):
             # Check optimization results for the current temporal index before moving on
             self._check_optimization_results(temporal_index)
 
-    def _evaluate_acquisition_functions(self, temporal_index, current_best_global_target, it):
-        for es in self.exploration_sets:
-            if (
-                self.interventional_data_x[temporal_index][es] is not None
-                and self.interventional_data_y[temporal_index][es] is not None
-            ):
-                bo_model = self.bo_model[temporal_index][es]
-                previous_variance = 1.0
-            else:
-                bo_model = None
-                if temporal_index > 0 and self.transfer_hp_i and self.bo_model[temporal_index - 1][es] is not None:
-                    previous_variance = self.bo_model[temporal_index - 1][es].model.kern.variance[0]
-                else:
-                    previous_variance = 1.0
-            # We evaluate this function IF there is interventional data at this time index
-            if self.seed_anchor_points is None:
-                seed_to_pass = None
-            else:
-                seed_to_pass = int(self.seed_anchor_points * (temporal_index + 1) * it)
-
-            (self.y_acquired[es], self.corresponding_x[es],) = evaluate_acquisition_function(
-                self.intervention_exploration_domain[es],
-                bo_model,
-                self.mean_function[temporal_index][es],
-                self.variance_function[temporal_index][es],
-                current_best_global_target,
-                es,
-                self.cost_functions,
-                self.task,
-                self.base_target_variable,
-                dynamic=True,
-                causal_prior=True,
-                temporal_index=temporal_index,
-                previous_variance=previous_variance,
-                num_anchor_points=self.num_anchor_points,
-                sample_anchor_points=self.sample_anchor_points,
-                seed_anchor_points=seed_to_pass,
-            )
-
-    def _update_sufficient_statistics(
-        self, target: str, temporal_index: int, updated_sem, assigned_blanket: dict
-    ) -> None:
-        # Check which current target we are dealing with, and in consequence where we are in time
-        target_variable, target_temporal_index = target.split("_")
-        assert int(target_temporal_index) == temporal_index
-
-        for es in self.exploration_sets:
-            #  Use estimates of sem
-            if self.estimate_sem:
-                (
-                    self.mean_function[temporal_index][es],
-                    self.variance_function[temporal_index][es],
-                ) = update_sufficient_statistics_hat(
-                    temporal_index,
-                    target_variable,
-                    es,
-                    updated_sem,
-                    self.node_parents,
-                    dynamic=True,
-                    assigned_blanket=assigned_blanket,
-                    mean_dict_store=self.mean_dict_store,
-                    var_dict_store=self.var_dict_store,
-                )
-            # Use true sem
-            else:
-                # At the first time-slice we do not have any previous fixed interventions to consider.
-                (
-                    self.mean_function[temporal_index][es],
-                    self.variance_function[temporal_index][es],
-                ) = update_sufficient_statistics(
-                    temporal_index,
-                    es,
-                    self.node_children,
-                    self.true_initial_sem,
-                    self.true_sem,
-                    dynamic=True,
-                    assigned_blanket=self.assigned_blanket,
-                )
-
-    def _update_bo_model(
-        self,
-        temporal_index: int,
-        exploration_set: tuple,
-        alpha: float = 2,
-        beta: float = 0.5,
-        noise_var: float = 1e-5,
-        prior_var: float = 1.0,
-        prior_lengthscale: float = 1.0,
-    ) -> None:
-
-        assert self.interventional_data_x[temporal_index][exploration_set] is not None
-        assert self.interventional_data_y[temporal_index][exploration_set] is not None
-
-        # Model does not exist so we create it
-        if not self.bo_model[temporal_index][exploration_set]:
-            input_dim = len(exploration_set)
-            # Specify mean function
-            mf = Mapping(input_dim, 1)
-            mf.f = self.mean_function[temporal_index][exploration_set]
-            mf.update_gradients = lambda a, b: None
-
-            variance, lengthscale = self._get_interventional_hp(
-                temporal_index, exploration_set, prior_var, prior_lengthscale
-            )
-
-            # Set kernel
-            causal_kernel = CausalRBF(
-                input_dim=input_dim,  # Indexed before passed to this function
-                variance_adjustment=self.variance_function[temporal_index][exploration_set],  # Variance function here
-                lengthscale=lengthscale,
-                variance=variance,
-                ARD=False,
-            )
-
-            #  Set model
-            model = GPRegression(
-                X=self.interventional_data_x[temporal_index][exploration_set],
-                Y=self.interventional_data_y[temporal_index][exploration_set],
-                kernel=causal_kernel,
-                noise_var=noise_var,
-                mean_function=mf,
-            )
-
-            # Store model
-            model.likelihood.variance.fix()
-            if self.hp_i_prior:
-                gamma = priors.Gamma(a=alpha, b=beta)  # See https://github.com/SheffieldML/GPy/issues/735
-                model.kern.variance.set_prior(gamma)
-
-            old_seed = np.random.get_state()
-
-            np.random.seed(self.seed)
-            model.optimize()
-
-            self.bo_model[temporal_index][exploration_set] = GPyModelWrapper(model)
-
-            np.random.set_state(old_seed)
-
-        else:
-            # Model exists so we simply update it
-            self.bo_model[temporal_index][exploration_set].set_data(
-                X=self.interventional_data_x[temporal_index][exploration_set],
-                Y=self.interventional_data_y[temporal_index][exploration_set],
-            )
-            old_seed = np.random.get_state()
-
-            np.random.seed(self.seed)
-            self.bo_model[temporal_index][exploration_set].optimize()
-
-            np.random.set_state(old_seed)
-
-        self._safe_optimization(temporal_index, exploration_set)
-
-    def _update_observational_data(self, temporal_index):
-        if temporal_index > 0:
-            if self.online:
-                if isinstance(self.n_obs_t, list):
-                    local_n_t = self.n_obs_t[temporal_index]
-                else:
-                    local_n_t = self.n_obs_t
-                assert local_n_t is not None
-
-                # Sample new data
-                set_observational_samples = sequentially_sample_model(
-                    static_sem=self.true_initial_sem,
-                    dynamic_sem=self.true_sem,
-                    total_timesteps=temporal_index + 1,
-                    sample_count=local_n_t,
-                    use_sem_estimate=False,
-                    interventions=self.assigned_blanket,
-                )
-
-                # Reshape data
-                set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
-
-                for var in self.observational_samples.keys():
-                    self.observational_samples[var][temporal_index] = set_observational_samples[var][temporal_index]
-            else:
-                if isinstance(self.n_obs_t, list):
-                    local_n_obs = self.n_obs_t[temporal_index]
-
-                    n_stored_observations = len(
-                        self.observational_samples[list(self.observational_samples.keys())[0]][temporal_index]
-                    )
-
-                    if self.online is False and local_n_obs != n_stored_observations:
-                        # We already have the same number of observations stored
-                        set_observational_samples = sequentially_sample_model(
-                            static_sem=self.true_initial_sem,
-                            dynamic_sem=self.true_sem,
-                            total_timesteps=temporal_index + 1,
-                            sample_count=local_n_obs,
-                            use_sem_estimate=False,
-                        )
-                        # Reshape data
-                        set_observational_samples = convert_to_dict_of_temporal_lists(set_observational_samples)
-
-                        for var in self.observational_samples.keys():
-                            self.observational_samples[var][temporal_index] = set_observational_samples[var][
-                                temporal_index
-                            ]
-
-    def _get_assigned_blanket(self, temporal_index):
-        if temporal_index > 0:
-            if self.optimal_assigned_blankets is not None:
-                assigned_blanket = self.optimal_assigned_blankets[temporal_index]
-            else:
-                assigned_blanket = self.assigned_blanket_hat
-        else:
-            assigned_blanket = self.assigned_blanket_hat
-        return assigned_blanket
