@@ -31,8 +31,8 @@ def setup_stat_scm(T: int = 3):
         interventional_grids=interventional_grids,
         initial_structural_equation_model=init_sem,
         structural_equation_model=sem,
-        graph=dag,
-        timesteps=T,
+        G=dag,
+        T=T,
         model_variables=["X", "Z", "Y"],
         target_variable="Y",
     )
@@ -64,8 +64,8 @@ def setup_ind_scm(T: int = 3):
         interventional_grids=interventional_grids,
         initial_structural_equation_model=init_sem,
         structural_equation_model=sem,
-        graph=dag,
-        timesteps=T,
+        G=dag,
+        T=T,
         model_variables=["X", "Z", "Y"],
         target_variable="Y",
     )
@@ -97,8 +97,8 @@ def setup_nonstat_scm(T: int = 3):
         interventional_grids=interventional_grids,
         initial_structural_equation_model=init_sem,
         structural_equation_model=sem,
-        graph=dag,
-        timesteps=T,
+        G=dag,
+        T=T,
         model_variables=["X", "Z", "Y"],
         target_variable="Y",
     )

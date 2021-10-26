@@ -460,7 +460,7 @@ def plot_expected_opt_curve_paper(
         out_all = []
         linet_list = []
 
-        for i, model in enumerate(cost.keys()):
+        for model in cost:
             cs = cost[model][time_index]
             cs_max = round(max(cs))
             cs_all.append(cs_max)

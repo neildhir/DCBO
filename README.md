@@ -28,7 +28,7 @@ Use `python > 3.7` and
 pip install -r requirements.txt
 ```
 
-## Demo and notebooks
+## Tutorials
 
 - [`stat_scm.ipynb`](notebooks/stat_scm.ipynb) walks through the basic steps required to run all methods (BO, ABO, CBO and DCBO) on the example SCM shown in figure 1 of the paper (shown above in panel (a)).
 - [`nonstat_scm.ipynb`](notebooks/stat_scm.ipynb) demonstrates how to run the methods on the SCM with the DAG shown in figure 3(c) of the paper, but over multiple replicates, to allow for confidence bounds over the results.

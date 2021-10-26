@@ -1,29 +1,25 @@
 import pickle
 from copy import deepcopy
-from random import sample
-from pandas import DataFrame, read_csv
+from typing import Callable, Tuple
 
-from matplotlib import pyplot as plt
 import numpy as np
+from networkx.classes.multidigraph import MultiDiGraph
+from pandas import DataFrame, read_csv
 from tqdm import trange
 
-from ..methods.dcbo import DCBO
-from ..methods.cbo import CBO
 from ..methods.abo import ABO
 from ..methods.bo import BO
-
+from ..methods.cbo import CBO
+from ..methods.dcbo import DCBO
 from ..utils.sequential_causal_functions import sequentially_sample_model
 from ..utils.sequential_intervention_functions import make_sequential_intervention_dictionary
 from ..utils.utilities import get_monte_carlo_expectation
-from ..utils.gp_utils import fit_causal_gp
-from ..utils.plotting import plot_optimisation_outcomes
 
 
 def run_methods_replicates(
-    graph,
+    G,
     sem,
-    make_sem_hat,
-    root_instrument,
+    make_sem_estimator,
     intervention_domain,
     methods_list,
     obs_samples,
@@ -89,13 +85,13 @@ def run_methods_replicates(
                     k: (np.random.randn(total_timesteps) + new_mean) * new_std
                     for k in initial_structural_equation_model.keys()
                 }
-                epsilon["Y"] = np.asarray(np.random.randn(total_timesteps))
+                epsilon[base_target_variable] = np.asarray(np.random.randn(total_timesteps))
                 epsilon_list.append(epsilon)
         else:
             epsilon_list = None
 
         np.random.seed(seed)
-        observational_samples = sequentially_sample_model(
+        observation_samples = sequentially_sample_model(
             initial_structural_equation_model,
             structural_equation_model,
             total_timesteps=total_timesteps,
@@ -103,7 +99,7 @@ def run_methods_replicates(
             epsilon=epsilon_list,
         )
     else:
-        observational_samples = obs_samples
+        observation_samples = obs_samples
 
     for ex in trange(reps, desc="Experiment count"):
         if controlled_experiment:
@@ -116,12 +112,12 @@ def run_methods_replicates(
 
         # Set parameters common to all methods
         input_params = {
-            "graph": graph,
+            "G": G,
             "sem": sem,
             "base_target_variable": base_target_variable,
-            "observational_samples": observational_samples,
+            "observation_samples": observation_samples,
             "intervention_domain": intervention_domain,
-            "interventional_samples": None,
+            "intervention_samples": None,
             "number_of_trials": number_of_trials,
             "task": "min",
             "cost_type": cost_structure,
@@ -150,9 +146,8 @@ def run_methods_replicates(
             use_mc,
             ground_truth,
             n_obs_t,
-            make_sem_hat,
+            make_sem_estimator,
             number_of_trials_BO_ABO,
-            root_instrument,
         )
 
         del input_params
@@ -210,7 +205,6 @@ def run_methods_replicates(
             ),
             "wb",
         ) as handle:
-            #  We have to use dill because our object contains lambda functions.
             pickle.dump(opt_results_for_pickle, handle)
             handle.close()
 
@@ -230,9 +224,8 @@ def run_all_opt_models(
     use_mc,
     ground_truth,
     n_obs_t,
-    make_sem_hat,
+    make_sem_estimator,
     number_of_trials_BO_ABO,
-    root_instrument,
 ):
 
     """
@@ -260,8 +253,7 @@ def run_all_opt_models(
             alg_input_params["ground_truth"] = ground_truth
             alg_input_params["use_mc"] = use_mc
             alg_input_params["n_obs_t"] = n_obs_t
-            alg_input_params["make_sem_hat"] = make_sem_hat
-            alg_input_params["root_instrument"] = root_instrument
+            alg_input_params["make_sem_estimator"] = make_sem_estimator
 
         if method == "DCBO":
             algorithm = DCBO
@@ -283,43 +275,41 @@ def run_all_opt_models(
         print("\n\t>>>" + method + "\n")
         model = algorithm(**alg_input_params)
         model.run_optimization()
-
         models_list.append(model)
 
     return models_list, names_list
 
 
 def optimal_sequence_of_interventions(
-    exploration_sets,
-    interventional_grids,
-    initial_structural_equation_model,
-    structural_equation_model,
-    graph,
-    timesteps=4,
-    model_variables=None,
-    target_variable=None,
-    task="min",
-):
+    exploration_sets: list,
+    interventional_grids: dict,
+    initial_structural_equation_model: Callable,
+    structural_equation_model: Callable,
+    G: MultiDiGraph,
+    T: int = 3,
+    model_variables: list = None,
+    target_variable: str = None,
+    task: str = "min",
+) -> Tuple:
     if model_variables is None:
-        static_noise_model = {k: np.zeros(timesteps) for k in ["X", "Z", "Y"]}
+        static_noise_model = {k: np.zeros(T) for k in ["X", "Z", "Y"]}
     else:
-        static_noise_model = {k: np.zeros(timesteps) for k in model_variables}
+        static_noise_model = {k: np.zeros(T) for k in model_variables}
 
     assert target_variable is not None
     assert target_variable in model_variables
 
-    range_T = range(timesteps)
-    shift_range_T = range(timesteps - 1)
+    range_T = range(T)
+    shift_range_T = range(T - 1)
     best_s_sequence = []
     best_s_values = []
     best_objective_values = []
 
-    # optimal_interventions, _ = make_sequential_intervention_dictionary(graph)
-    optimal_interventions = {setx: [None] * timesteps for setx in exploration_sets}
+    optimal_interventions = {setx: [None] * T for setx in exploration_sets}
 
     y_stars = deepcopy(optimal_interventions)
     all_CE = []
-    blank_intervention_blanket, _ = make_sequential_intervention_dictionary(graph)
+    blank_intervention_blanket = make_sequential_intervention_dictionary(G, T)
 
     for t in range_T:
 
@@ -346,7 +336,7 @@ def optimal_sequence_of_interventions(
                     intervention_samples = sequentially_sample_model(
                         initial_structural_equation_model,
                         structural_equation_model,
-                        total_timesteps=timesteps,
+                        total_timesteps=T,
                         interventions=intervention_blanket,
                         sample_count=1,
                         epsilon=static_noise_model,
@@ -381,7 +371,7 @@ def optimal_sequence_of_interventions(
                     intervention_samples = sequentially_sample_model(
                         initial_structural_equation_model,
                         structural_equation_model,
-                        total_timesteps=timesteps,
+                        total_timesteps=T,
                         interventions=intervention_blanket,
                         sample_count=1,
                         epsilon=static_noise_model,
@@ -419,107 +409,6 @@ def optimal_sequence_of_interventions(
     )
 
 
-def optimise_one_time_step(
-    time_index,
-    exploration_set,
-    mean_fnc,
-    var_fnc,
-    expectation_estimates,
-    objective_values,
-    intervention_levels,
-    interventional_grids: dict,
-    observational_samples,
-    time_slice_batch_indices,
-    true_causal_effects,
-    plot_me=True,
-    index_data=None,
-    intervention_points=[1, 1, 1],
-) -> None:
-
-    N = range(interventional_grids[exploration_set].shape[0])
-
-    k = len(intervention_points)
-    plt.rcParams.update({"font.size": 20, "text.usetex": True, "font.family": "serif"})
-
-    plt.plot(
-        interventional_grids[exploration_set], mean_fnc(interventional_grids[exploration_set]),
-    )
-    plt.plot(
-        interventional_grids[exploration_set], true_causal_effects[time_index][exploration_set], color="red",
-    )
-    plt.show()
-
-    fig, ax = plt.subplots(k, figsize=(11, k * 5))
-    index = []
-    X_I_train_list = []
-    Y_I_train_list = []
-
-    for i, n in enumerate(intervention_points):
-        # Select points to explore
-        if index_data is None:
-            idx = sample(N, n)  # No replacement
-        else:
-            idx = [index_data[i]]
-
-        index.extend(idx)
-        N = list(set(N) - set(idx))
-
-        # Interventional data
-        X_I_train = interventional_grids[exploration_set][index]
-        X_I_train_list.append(X_I_train)
-        # Samples drawn from true causal effect
-        Y_I_train = np.array(true_causal_effects[time_index][exploration_set])[index].reshape(-1, 1)
-        Y_I_train_list.append(Y_I_train)
-
-        # Estimate of expected causal effect
-        expectation_estimates[exploration_set][time_index] = fit_causal_gp(
-            mean_function=mean_fnc, variance_function=var_fnc, X=X_I_train, Y=Y_I_train
-        )
-        # Get mean and variance of estimate
-        # if time_index == 0:
-        M, V = expectation_estimates[exploration_set][time_index].predict(interventional_grids[exploration_set])
-
-        # Optimal value (y^*_{time_index})
-        idx = M.argmin()
-        objective_values[exploration_set][time_index] = float(M[idx])
-
-        # TODO: this is not yet specified for multivariate interventions.
-        intervention_levels[exploration_set][time_index] = interventional_grids[exploration_set][idx][0]
-        # Variance
-        CI = np.sqrt(V)
-        # Confidence intervals
-        vmax = M + CI
-        vmin = M - CI
-
-        if plot_me:
-            plot_optimisation_outcomes(
-                ax,
-                i,
-                interventional_grids,
-                M,
-                time_index,
-                exploration_set,
-                true_causal_effects,
-                vmin,
-                vmax,
-                X_I_train,
-                Y_I_train,
-                observational_samples,
-                time_slice_batch_indices,
-                objective_values,
-                n,
-            )
-    fig.tight_layout()
-
-    return (
-        objective_values,
-        expectation_estimates,
-        intervention_levels,
-        X_I_train_list,
-        Y_I_train_list,
-    )
-
-
 def create_plankton_dataset(start: int, end: int) -> dict:
     """Function to create dataset for plankton experiment.
 
@@ -527,7 +416,7 @@ def create_plankton_dataset(start: int, end: int) -> dict:
 
     A series of ten chemostat experiments was performed, constituting a total of 1,948 measurement days (corresponding to 5.3 years of measurement) and covering 3 scenarios.
 
-    Constant environmental conditions (C1–C7, 1,428 measurement days). This scenario consisted of 4 trials with the alga M. minutum (C1–C4) which is what we use in these experiments. All data is lives in `data/plankton` and is freely available online.
+    Constant environmental conditions (C1–C7, 1,428 measurement days). This scenario consisted of 4 trials with the alga M. minutum (C1–C4) which is what we use in these experiments. All data lives in `data/plankton` and is freely available online.
 
     [1] Blasius B, Rudolf L, Weithoff G, Gaedke U, Fussmann G.F. Long-term cyclic persistence in an experimental predator-prey system. Nature (2019).
 
