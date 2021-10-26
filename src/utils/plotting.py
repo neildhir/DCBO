@@ -4,6 +4,7 @@ import numpy as np
 import seaborn as sns
 from numpy import array, hstack, linspace, meshgrid, newaxis, sqrt
 from pandas import DataFrame
+from matplotlib.ticker import MaxNLocator
 from seaborn import jointplot, set_context, set_style
 from .sequential_causal_functions import sequentially_sample_model
 
@@ -431,15 +432,15 @@ def plot_average_curve(
 
 
 def plot_expected_opt_curve_paper(
-    T: int,
+    total_timesteps,
     ground_truth,
     cost,
     outcome,
     plot_params,
     ground_truth_dict=None,
-    filename: str = None,
-    fig_size: tuple = (15, 3),
-    save_fig=False,
+    filename=None,
+    fig_size=(15, 3),
+    y_lim_list=None,
 ):
 
     sns.set_theme(
@@ -447,26 +448,25 @@ def plot_expected_opt_curve_paper(
     )
     sns.set_style({"xtick.direction": "in", "ytick.direction": "in"})
 
-    if T > 3:
-        fig, axs = plt.subplots(2, int(T / 2), figsize=fig_size, facecolor="w", edgecolor="k")
+    if total_timesteps > 3:
+        fig, axs = plt.subplots(2, int(total_timesteps / 2), figsize=(15, 6), facecolor="w", edgecolor="k")
     else:
-        fig, axs = plt.subplots(1, T, figsize=fig_size, facecolor="w", edgecolor="k")
+        fig, axs = plt.subplots(1, total_timesteps, figsize=fig_size, facecolor="w", edgecolor="k")
 
     fig.subplots_adjust(hspace=0.5, wspace=0.13)
 
     axs = axs.ravel()
-    for time_index in range(T):
+    for time_index in range(total_timesteps):
         cs_all = []
         out_all = []
         linet_list = []
 
-        for model in cost:
+        for i, model in enumerate(cost.keys()):
             cs = cost[model][time_index]
             cs_max = round(max(cs))
             cs_all.append(cs_max)
 
-            a = np.array(outcome[model][time_index])
-            out_max = np.ceil(a[np.isfinite(a)].max())
+            out_max = np.max(np.array(outcome[model][time_index]))
             out_all.append(out_max)
 
             # Mean
@@ -477,6 +477,8 @@ def plot_expected_opt_curve_paper(
                 ls=plot_params["line_styles"][model],
                 label=plot_params["labels"][model],
                 color=plot_params["colors"][model],
+                zorder=1 + i,
+                alpha=plot_params["alpha"] + 0.5,
             )
             linet_list.append(linet)
 
@@ -502,10 +504,10 @@ def plot_expected_opt_curve_paper(
                     ls=plot_params["line_styles"]["True"],
                     label=model + ", " + plot_params["labels"]["True"],
                     zorder=15,
-                    alpha=plot_params["alpha"] + 0.7,
+                    alpha=plot_params["alpha"],
                 )
                 linet_list.append(gt_line)
-        # else:
+
         gt_line = axs[time_index].hlines(
             y=ground_truth[time_index],
             xmin=0,
@@ -515,6 +517,7 @@ def plot_expected_opt_curve_paper(
             ls=plot_params["line_styles"]["True"],
             label=plot_params["labels"]["True"],
             zorder=10,
+            # alpha=plot_params["alpha"] + 0.1,
         )
         linet_list.append(gt_line)
 
@@ -527,19 +530,16 @@ def plot_expected_opt_curve_paper(
                 np.max(outcome[model][time_index][0] + outcome[model][time_index][1] + 0.3),
             )
         else:
-            axs[time_index].set_ylim(
-                ground_truth[time_index] - 0.2, ground_truth[time_index] + 3,
-            )
-
-        # Annotate (1, 3)
-        bbox_props = dict(boxstyle="round,pad=0.3", fc="w", ec="k", lw=1.5)
+            if y_lim_list and time_index in y_lim_list:
+                axs[time_index].set_ylim(y_lim_list[time_index][0], y_lim_list[time_index][1])
+            else:
+                axs[time_index].set_ylim(ground_truth[time_index] - 1, np.max(out_all) + 1)
 
         axs[time_index].annotate(
             "$t = {}$".format(time_index),
             xy=(0, 0.0),
             xycoords="axes fraction",
-            xytext=(0.45, 0.85),
-            bbox=bbox_props,
+            xytext=(0.81, 0.83),
             fontsize=plot_params["size_labels"],
         )
 
@@ -547,22 +547,22 @@ def plot_expected_opt_curve_paper(
         if time_index == 0:
             axs[time_index].set_ylabel("$y_t^\star$", fontsize=plot_params["size_labels"])
 
+        axs[time_index].yaxis.set_major_locator(MaxNLocator(integer=True, nbins=3))
+
     lgd = plt.legend(
-        ncol=plot_params["ncols"],
-        handles=linet_list,
-        bbox_to_anchor=(0, -0.6),
-        loc=plot_params["loc_legend"],
-        fontsize="large",
+        ncol=1, handles=linet_list, bbox_to_anchor=(1.82, -0.1), loc="lower right", fontsize="large", frameon=False
     )
 
-    if save_fig and filename:
+    if filename:
         # Set reference time for save
         now = datetime.datetime.now()
         fig.savefig(
-            "../figures/synthetic/opt_curves_" + filename + "_" + now.strftime("%d%m%Y_%H%M") + ".pdf",
+            "../figures/" + filename + "_" + now.strftime("%d%m%Y_%H%M") + ".pdf",
             bbox_extra_artists=(lgd,),
             bbox_inches="tight",
         )
+
+    plt.show()
 
 
 def plot_outcome(T, N, outcomes: list, labels: list, true_objective_values: list = None) -> None:

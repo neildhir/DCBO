@@ -5,6 +5,7 @@ import numpy as np
 from emukit.core import ContinuousParameter, ParameterSpace
 from numpy.core import hstack, vstack
 from .sequential_causal_functions import sequential_sample_from_model
+import matplotlib.pyplot as plt
 
 
 def standard_mean_function(x):
@@ -379,3 +380,77 @@ def powerset(iterable):
     # this returns e.g. powerset([1,2,3]) --> (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
     s = list(iterable)
     return chain.from_iterable(combinations(s, r) for r in range(1, len(s) + 1))
+
+
+def calculate_best_intervention_and_effect(
+    static_sem,
+    dynamic_sem,
+    exploration_sets,
+    interventional_grids,
+    time,
+    blanket,
+    T,
+    plot=False,
+    target="Y",
+    print_option=False,
+):
+    true_causal_effect = {key: None for key in exploration_sets}
+    static_noise_model = {k: np.zeros(T) for k in static_sem.keys()}
+    for es in exploration_sets:
+        res = []
+        this_blanket = deepcopy(blanket)
+        for xx in interventional_grids[es]:
+            for intervention_variable, x in zip(es, xx):
+                this_blanket[intervention_variable][time] = x
+            out = sequential_sample_from_model(
+                static_sem=static_sem,
+                dynamic_sem=dynamic_sem,
+                timesteps=time + 1,
+                epsilon=static_noise_model,
+                interventions=this_blanket,
+            )
+
+            res.append(out[target][time])
+
+        true_causal_effect[es] = np.array(res)
+
+    #  Plot results
+    if plot:
+        for es in exploration_sets:
+            if len(es) == 1:
+                fig, ax = plt.subplots(1, 1, figsize=(10, 5))
+                fig.suptitle("True causal effect at $t={}$".format(time))
+                ax.plot(
+                    interventional_grids[es], true_causal_effect[es], lw=2, alpha=0.5, label="$do{}$".format(es),
+                )
+                plt.legend()
+
+    opt_vals = {es: None for es in exploration_sets}
+    # Find best causal effect
+    for es in exploration_sets:
+        Y = true_causal_effect[es].tolist()
+        # Min value
+        outcome_min_val = min(Y)
+        # Corresponding intervention at min value
+        idx = Y.index(outcome_min_val)
+        opt_vals[es] = (outcome_min_val, interventional_grids[es][idx, :])
+
+    # Get best
+    minval = min(k[0] for k in opt_vals.values())
+    best_es = [k for k, v in opt_vals.items() if v[0] == minval]
+
+    # Indexed by zero so we take the shortest ES first
+    if print_option is True:
+        print("\nBest exploration set: {}".format(best_es))
+        print("Best intervention level: {}".format(opt_vals[best_es[0]][1]))
+        print("Best best outcome value: {}".format(opt_vals[best_es[0]][0]))
+
+    for intervention_variable, x in zip(best_es[0], opt_vals[best_es[0]][1]):
+        blanket[intervention_variable][time] = x
+    blanket[target][time] = opt_vals[best_es[0]][0]
+
+    if print_option is True:
+        print("\nNext blanket:\n")
+        print(blanket)
+
+    return blanket, true_causal_effect

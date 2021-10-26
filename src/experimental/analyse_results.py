@@ -1,11 +1,42 @@
+from typing import Callable, Dict, Tuple
 import numpy as np
+from numpy import cumsum
 from copy import deepcopy
-from ..utils.utilities import get_cumulative_cost_mean_and_std
 from ..utils.utilities import calculate_best_intervention_and_effect
 
 
+def get_relevant_results(results: Callable, replicates: int) -> Dict[str, tuple]:
+    """
+    When we get results from a notebook they are in a different format from when we pickle them. This function converts the results into the correct format so that we can analyse them.
+
+    Parameters
+    ----------
+    results : Callable
+        The results from running the function 'run_methods_replicates()'
+    replicates : int
+        How many replicates we used.
+
+    Returns
+    -------
+    Dict[str, tuple]
+        A dictionary with the methods on the keys with results from each replicates on the values.
+    """
+    data = {m: [] for m in results}
+    for m in results:
+        for r in range(replicates):
+            data[m].append(
+                (
+                    results[m][r].per_trial_cost,
+                    results[m][r].optimal_outcome_values_during_trials,
+                    results[m][r].optimal_intervention_sets,
+                    results[m][r].assigned_blanket,
+                )
+            )
+    return data
+
+
 def get_mean_and_std(data, t_steps, repeats=5):
-    out = {key: [] for key in data.keys()}
+    out = {key: [] for key in data}
     for model in data.keys():
         for t in range(t_steps):
             tmp = []
@@ -16,10 +47,26 @@ def get_mean_and_std(data, t_steps, repeats=5):
     return out
 
 
-def elaborate(number_of_interventions, n_replicates, data, best_objective_values, T):
+def get_cumulative_cost_mean_and_std(data, t_steps, repeats=5):
+    out = {key: [] for key in data}
+    for model in data.keys():
+        for t in range(t_steps):
+            tmp = []
+            for ex in range(repeats):
+                tmp.append(data[model][ex][t])
+            tmp = np.vstack(tmp)
+            # Calculate the cumulative sum here
+            out[model].append(cumsum(tmp.mean(axis=0)))
+    return out
+
+
+def elaborate(
+    number_of_interventions: int, n_replicates: int, data: dict, best_objective_values: list, T: int
+) -> Tuple[dict, dict]:
+
     # Replace initial data point
     if number_of_interventions is None:
-        for model in data.keys():
+        for model in data:
             for r in range(n_replicates):
                 for t in range(T):
                     if data[model][r][1][t][0] == 10000000.0:
@@ -30,7 +77,7 @@ def elaborate(number_of_interventions, n_replicates, data, best_objective_values
     optimal_outcome_values_during_trials = {model: [] for model in data.keys()}
 
     for i in range(n_replicates):
-        for model in data.keys():
+        for model in data:
             per_trial_cost[model].append(data[model][i][0])
             optimal_outcome_values_during_trials[model].append(data[model][i][1])
 
@@ -40,7 +87,7 @@ def elaborate(number_of_interventions, n_replicates, data, best_objective_values
         optimal_outcome_values_during_trials, T, repeats=n_replicates
     )
 
-    for model in exp_per_trial_cost.keys():
+    for model in exp_per_trial_cost:
         if model == "BO" or model == "ABO":
             costs = exp_per_trial_cost[model]
             values = exp_optimal_outcome_values_during_trials[model]
@@ -54,7 +101,7 @@ def elaborate(number_of_interventions, n_replicates, data, best_objective_values
 
     # Clip values so they are not lower than the min
     clip_max = 1000
-    for model in exp_per_trial_cost.keys():
+    for model in exp_per_trial_cost:
         for t in range(T):
             clipped = np.clip(
                 exp_optimal_outcome_values_during_trials[model][t][0], a_min=best_objective_values[t], a_max=clip_max
@@ -93,10 +140,8 @@ def get_converge_trial(best_objective_values, exp_optimal_outcome_values_during_
 def get_common_initial_values(
     T, data, n_replicates,
 ):
-
     total_initial_list = []
     for t in range(T):
-
         reps_initial_list = []
         for r in range(n_replicates):
             initial_list = []
@@ -105,23 +150,17 @@ def get_common_initial_values(
                 initial = values[0]
                 if initial == 10000000.0:
                     initial = values[1]
-
                 initial_list.append(initial)
-
             reps_initial_list.append(np.max(initial_list))
-
         total_initial_list.append(reps_initial_list)
-
     return total_initial_list
 
 
 def get_table_values(dict_gap_summary, T, n_decimal_mean=2, n_decimal_std=2):
     total_list_mean = []
-
     for method in dict_gap_summary.keys():
         list_method_mean = [method]
         list_method_std = [" "]
-
         for t in range(T):
             list_method_mean.append(np.round(dict_gap_summary[method][t][0], n_decimal_mean))
             std_value = np.round(dict_gap_summary[method][t][1], n_decimal_std)
@@ -156,28 +195,21 @@ def count_optimal_intervention_set(n_replicates, T, data, optimal_set):
 def gap_metric_standard(
     T, data, best_objective_values, total_initial_list, n_replicates, n_trials, where_converge_dict=None,
 ):
-
     dict_gap = {method: [None] * T for method in list(data.keys())}
-
     for method in list(data.keys()):
         for t in range(T):
             for r in range(n_replicates):
                 values = data[method][r][1][t]
-
                 initial = total_initial_list[t][r]
-
                 last = values[-1]
-
                 if last - initial == 0.0:
                     gap = 0.0
                 else:
                     gap = np.clip((last - initial) / (best_objective_values[t] - initial), 0.0, 1.0)
-
                 if dict_gap[method][t] is None:
                     dict_gap[method][t] = [gap]
                 else:
                     dict_gap[method][t].append(gap)
-
     dict_gap_iters_summary = {method: [None] * T for method in list(data.keys())}
     for t in range(T):
         for method in data.keys():
@@ -191,7 +223,7 @@ def gap_metric_standard(
 
 def get_stored_blanket(T, data, n_replicates, list_var):
     store_blankets = {
-        model: [[{var: [None] * T for var in list_var} for t in range(T)] for n in range(n_replicates)]
+        model: [[{var: [None] * T for var in list_var} for _ in range(T)] for _ in range(n_replicates)]
         for model in data.keys()
     }
     for method in data.keys():
@@ -242,8 +274,8 @@ def store_optimal_set_values(
     data,
     n_replicates,
     T,
-    initial_structural_equation_model,
-    structural_equation_model,
+    init_sem,
+    sem,
     exploration_sets,
     interventional_grids,
     intervention_domain,
@@ -253,11 +285,11 @@ def store_optimal_set_values(
     optimal_intervention_sets = {model: [] for model in data.keys()}
     for model in data.keys():
         for r in range(n_replicates):
-            GT, _ = get_GT(
+            GT, _ = get_ground_truth(
                 deepcopy(store_blankets[model][r]),
                 T,
-                initial_structural_equation_model,
-                structural_equation_model,
+                init_sem,
+                sem,
                 exploration_sets,
                 interventional_grids,
                 intervention_domain,
@@ -270,21 +302,15 @@ def store_optimal_set_values(
     return optimal_intervention_sets, optimal_intervention_values
 
 
-def get_GT(
-    blanket,
-    T,
-    initial_structural_equation_model,
-    structural_equation_model,
-    exploration_sets,
-    interventional_grids,
-    intervention_domain,
+def get_ground_truth(
+    blanket, T, init_sem, sem, exploration_sets, interventional_grids, intervention_domain,
 ):
     optimal_assigned_blankets = [None] * T
-    GT = []
+    ground_truth = []
     for t in range(T):
         new_blanket, true_causal_effect = calculate_best_intervention_and_effect(
-            static_sem=initial_structural_equation_model,
-            dynamic_sem=structural_equation_model,
+            static_sem=init_sem,
+            dynamic_sem=sem,
             exploration_sets=exploration_sets,
             interventional_grids=interventional_grids,
             time=t,
@@ -295,7 +321,6 @@ def get_GT(
         )
         if t < T - 1:
             optimal_assigned_blankets[t + 1] = new_blanket
+        ground_truth.append(true_causal_effect)
 
-        GT.append(true_causal_effect)
-
-    return GT, optimal_assigned_blankets
+    return ground_truth, optimal_assigned_blankets
