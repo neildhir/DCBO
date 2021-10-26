@@ -6,17 +6,23 @@ This is a Python implementation of [Dynamic Causal Bayesian Optimization](https:
 
 This paper studies the problem of performing a sequence of optimal interventions in a causal dynamical system where both the target variable of interest and the inputs evolve over time. This problem arises in a variety of domains e.g. system biology and operational research. Dynamic Causal Bayesian Optimization (DCBO) brings together ideas from sequential decision making, causal inference and Gaussian process (GP) emulation. DCBO is useful in scenarios where all causal effects in a graph are changing over time. At every time step DCBO identifies a local optimal intervention by integrating both observational and past interventional data collected from the system. We give theoretical results detailing how one can transfer interventional information across time steps and define a dynamic causal GP model which can be used to quantify uncertainty and find optimal interventions in practice. We demonstrate how DCBO identifies optimal interventions faster than competing approaches in multiple settings and applications.
 
-
-
 <p align="center" width="100%">
-    <img width="70%" src="figures/quadrant.png">
+    <img width="60%" src="figures/quadrant.png">
 </p>
 
 ### Authors
 
 [Virginia Aglietti](https://uk.linkedin.com/in/virginia-aglietti-a80321a4), [Neil Dhir](https://neildhir.github.io/), [Javier Gonzalez](https://javiergonzalezh.github.io/) and [Theodoros Damoulas](https://warwick.ac.uk/fac/sci/statistics/staff/academic-research/damoulas/)
 
-## Requirements
+### Demonstration
+
+<p align="center" width="100%">
+    <img width="100%" src="figures/demo_fig.png">
+</p>
+
+## Installation
+
+Use `python > 3.7` and
 
 ```[markdown]
 pip install -r requirements.txt
@@ -24,15 +30,8 @@ pip install -r requirements.txt
 
 ## Demo and notebooks
 
-This is roughly how the algorithms will behave and how they are implemented:
-
-1. DCBO: `causal_prior == True, dynamic == True`
-2. ABO: `causal_prior == False, dynamic == True`
-3. CBO: `causal_prior == True, dynamic == False`
-4. BO: `causal_prior == False, dynamic == False`
-
-- [stat_scm.ipynb](notebooks/stat_scm.ipynb) walks through the basic steps required to run all methods (BO, ABO, CBO and DCBO) on the example SCM shown in figure 1 of the paper.
-- [nonstat_scm.ipynb](notebooks/stat_scm.ipynb) demonstrates how to run the methods on the SCM with the DAG shown in figure 3(c) of the paper, but over multiple replicates, to allow for confidence bounds over the results.
+- [`stat_scm.ipynb`](notebooks/stat_scm.ipynb) walks through the basic steps required to run all methods (BO, ABO, CBO and DCBO) on the example SCM shown in figure 1 of the paper (shown above in panel (a)).
+- [`nonstat_scm.ipynb`](notebooks/stat_scm.ipynb) demonstrates how to run the methods on the SCM with the DAG shown in figure 3(c) of the paper, but over multiple replicates, to allow for confidence bounds over the results.
 
 ## Citation
 
@@ -58,4 +57,4 @@ You should have received a copy of the GNU General Public License along with thi
 
 ## Disclaimer
 
-This is research code. Written by researchers, for researchers. We do not have enough time nor are we professional software engineers and are thus not equipped to make a (more) robust implementation. Consequently, things may break. If they do please do not be angry. Instead, if you would like to contribute, find things that are broken or have any suggestions for this work, you can contact us at ndhir@turing.ac.uk or open an issue on this repository.
+This is research code. Written by researchers, for researchers. We are not professional software developers and are thus not equipped to make a (more) robust implementation. Consequently, things may break. If they do please do not be angry. Instead, if you would like to contribute, find things that are broken or have any suggestions for this work, you can contact us at ndhir@turing.ac.uk or open an issue on this repository.
