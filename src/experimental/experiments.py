@@ -57,9 +57,9 @@ def run_methods_replicates(
 ):
 
     #  Structural equation model
-    if args_sem is None and True not in change_points:
+    if args_sem is None and change_points is None:
         true_sem = sem()
-    elif args_sem and True not in change_points:
+    elif args_sem and change_points is None:
         true_sem = sem(args_sem[0], args_sem[1])
     else:
         true_sem = sem(change_points.index(True))
@@ -228,12 +228,9 @@ def run_all_opt_models(
     number_of_trials_BO_ABO,
 ):
 
-    """
-    Sequential run of experiments
-    """
+    # Sequential run of experiments
     models_list = []
     names_list = []
-
     for method in methods_list:
 
         assert method in ["ABO", "DCBO", "BO", "CBO"], (
