@@ -1,4 +1,5 @@
 from graphviz import Source
+from collections import Counter
 from numpy import repeat
 from itertools import cycle, chain
 from networkx import topological_sort, MultiDiGraph
@@ -142,7 +143,7 @@ def get_independent_causes(time_slice_vars: List[str], G: MultiDiGraph) -> Dict[
 
 def get_summary_graph_node_parents(time_slice_vars: List[str], G: MultiDiGraph) -> Tuple[Dict[str, tuple], List[str]]:
     """
-    Finds the summary graph of the DBN a la page 199 of `Elements of Causal Inference'.
+    Finds the summary graph of the CBN a la page 199 of `Elements of Causal Inference'.
 
     Parameters
     ----------
@@ -167,3 +168,39 @@ def get_summary_graph_node_parents(time_slice_vars: List[str], G: MultiDiGraph) 
     summary_graph_node_parents = {k: summary_graph_node_parents[k] for k in causal_order}
 
     return summary_graph_node_parents, causal_order
+
+
+def get_subgraph(t: int, time_slice_vars: set, G: MultiDiGraph) -> MultiDiGraph:
+    """Extracts the sub-graph related to a given time-slice indexed by t.
+
+    Parameters
+    ----------
+    t : int
+        Time index for which we want the time-slice.
+    time_slice_vars : set
+        The [un-indexed] vertices of the time-slice e.g. ['X','Z','Y'] -- for the SCM example used throughout the paper.
+    G : MultiDiGraph
+        DAG
+
+    Returns
+    -------
+    MultiDiGraph
+        Sub-graph of the time-index.
+    """
+    return G.subgraph([v + "_{}".format(t) for v in time_slice_vars])
+
+
+def query_common_cause(summary_graph_node_parents: dict) -> Union[str, list]:
+    # Counts how many times each value appears
+    cnt = Counter(summary_graph_node_parents.values())
+    #  If this list is populated then one or more common cause relationships exist in the time-slice
+    common_cause = [k for (k, v) in cnt.items() if v > 1]
+
+    if len(common_cause) > 1:
+        raise NotImplementedError("Graphs this complex have not yet been catered for.")
+    elif len(common_cause) == 0:
+        return common_cause
+    else:
+        # Returns the nodes which have the common cause
+        return [k for k, v in summary_graph_node_parents.items() if v == common_cause[0]]
+

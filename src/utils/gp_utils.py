@@ -5,7 +5,7 @@ from GPy.core.parameterization import priors
 from GPy.kern import RBF
 from GPy.models.gp_regression import GPRegression
 from ..bayes_opt.causal_kernels import CausalRBF
-from .sequential_causal_functions import sequential_sample_from_complex_model_hat, sequential_sample_from_model
+from .sequential_causal_functions import sequential_sample_from_model_hat, sequential_sample_from_model
 
 
 def update_sufficient_statistics_hat(
@@ -61,10 +61,8 @@ def update_sufficient_statistics_hat(
                 for intervention_variable, xx in zip(exploration_set, x):
                     intervention_blanket[intervention_variable][temporal_index] = xx
 
-                # TODO: parallelise all sampling functions, this is much too slow
-                sample = sequential_sample_from_complex_model_hat(
-                    interventions=intervention_blanket, **kwargs1, seed=seed
-                )
+                # TODO: parallelise all sampling functions, this is much too slow [GPyTorch]
+                sample = sequential_sample_from_model_hat(interventions=intervention_blanket, **kwargs1, seed=seed)
                 out.append(sample[target_variable][temporal_index])
 
                 mean_dict_store[temporal_index][exploration_set][str(x)] = sample[target_variable][temporal_index]
@@ -86,9 +84,7 @@ def update_sufficient_statistics_hat(
                     intervention_blanket[intervention_variable][temporal_index] = xx
 
                 # TODO: parallelise all sampling functions, this is much too slow
-                sample = sequential_sample_from_complex_model_hat(
-                    interventions=intervention_blanket, **kwargs2, seed=seed
-                )
+                sample = sequential_sample_from_model_hat(interventions=intervention_blanket, **kwargs2, seed=seed)
                 out.append(sample[target_variable][temporal_index])
 
                 var_dict_store[temporal_index][exploration_set][str(x)] = sample[target_variable][temporal_index]

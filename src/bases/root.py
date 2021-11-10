@@ -87,27 +87,26 @@ class Root:
         #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
         time_slice_vars = observation_samples.keys()
         self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
-        #  Checks what vars in DAG (if any) are independent causes
+        #  Checks what vars in DAG (if any) are independent causes (or 'sources' depending on your background)
         self.independent_causes = get_independent_causes(time_slice_vars, G)
-
+        # Extracted DAG properties
         self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
 
+        # Fit Gaussian processes
         self.sem_emit_fncs = fit_sem_emit_fncs(self.observational_samples, self.emission_pairs)
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task
         self.task = task
         if task == "min":
-            self.blank_val = 1e7  # Positive "infinity"
+            self.blank_val = 1e7  # Positive "infinity" (big number)
         elif task == "max":
-            self.blank_val = -1e7  # Negative "infinity"
+            self.blank_val = -1e7  # Negative "infinity" (small number)
 
         # Instantiate blanket that will form final solution
         self.optimal_blanket = make_sequential_intervention_dictionary(self.G, self.T)
 
-        # Contains all values a assigned as the DCBO walks through the graph;
-        # optimal intervention level are assigned at the same temporal level,
-        # for which we then use spatial SEMs to predict the other variable levels on that time-slice.
+        # Contains all values a assigned as the DCBO walks through the graph; optimal intervention level are assigned at the same temporal level, for which we then use spatial SEMs to predict the other variable levels on that time-slice.
         self.assigned_blanket = deepcopy(self.optimal_blanket)
         self.empty_intervention_blanket = make_sequential_intervention_dictionary(self.G, self.T)
 
@@ -350,8 +349,13 @@ class Root:
         for key in self.sem_emit_fncs[temporal_index]:
             if len(key) == 1:
                 print("{}\n".format(key))
-                self.sem_emit_fncs[temporal_index][key].plot()
-                plt.show()
+                if isinstance(self.sem_emit_fncs[temporal_index][key], dict):
+                    for item in self.sem_emit_fncs[temporal_index][key]:
+                        item.plot()
+                        plt.show()
+                else:
+                    self.sem_emit_fncs[temporal_index][key].plot()
+                    plt.show()
 
         print("\n### Transmissions ###\n")
         if callable(getattr(self.__class__, self.sem_trans_fncs)):

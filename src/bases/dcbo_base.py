@@ -13,7 +13,7 @@ from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
 from src.utils.gp_utils import (
     fit_gp,
-    sequential_sample_from_complex_model_hat,
+    sequential_sample_from_model_hat,
 )
 from src.utils.sem_utils.transitions import fit_sem_trans_fncs, get_transition_input_output_pairs
 from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
@@ -267,7 +267,7 @@ class BaseClassDCBO(Root):
 
                         this_blanket["Y"][t] = float(yy)
 
-                        out = sequential_sample_from_complex_model_hat(
+                        out = sequential_sample_from_model_hat(
                             static_sem=self.static_sem,
                             dynamic_sem=self.sem,
                             timesteps=self.T,

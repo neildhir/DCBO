@@ -3,6 +3,8 @@ from typing import Callable, Dict
 
 from numpy.random import randn
 
+from src.utils.dag_utils.graph_functions import query_common_cause
+
 from ..utilities import select_sample
 
 
@@ -38,26 +40,35 @@ def auto_sem_hat(
     """
 
     class SEMHat:
+        def __init__(self) -> None:
+            self.common_cause_children = query_common_cause(summary_graph_node_parents)
+
         @staticmethod
         def _make_white_noise_fnc() -> Callable:
             #  Samples the exogenous model which we take to be white noise
             return lambda: randn()
 
         @staticmethod
-        def _make_static_fnc(moment: int) -> Callable:
+        def _make_static_fnc(moment: int, common_cause_child: str = None) -> Callable:
             #  No temporal dependence
-            return lambda t, emit_input_var, sample: emission_functions[t][emit_input_var].predict(
-                select_sample(sample, emit_input_var, t)
-            )[moment]
+            return lambda t, emit_input_var, sample: (
+                emission_functions[t][emit_input_var][common_cause_child]
+                if common_cause_child
+                else emission_functions[t][emit_input_var]
+            ).predict(select_sample(sample, emit_input_var, t))[moment]
 
         @staticmethod
-        def _make_dynamic_fnc(moment: int) -> Callable:
+        def _make_dynamic_fnc(moment: int, common_cause_child: str = None) -> Callable:
             #  Temporal dependence
             return (
                 lambda t, transfer_input_vars, emit_input_vars, sample: transition_functions[
                     transfer_input_vars
                 ].predict(select_sample(sample, transfer_input_vars, t - 1))[moment]
-                + emission_functions[t][emit_input_vars].predict(select_sample(sample, emit_input_vars, t))[moment]
+                + (
+                    emission_functions[t][emit_input_vars][common_cause_child]
+                    if common_cause_child
+                    else emission_functions[t][emit_input_vars]
+                ).predict(select_sample(sample, emit_input_vars, t))[moment]
             )
 
         @staticmethod
@@ -70,14 +81,20 @@ def auto_sem_hat(
             assert moment in [0, 1], moment
             # SEM functions
             f = OrderedDict()
-            # Assume variables are causally ordered
+            # Assumes that the keys are causally ordered
             for v in summary_graph_node_parents:
                 if not summary_graph_node_parents[v] or independent_causes[v]:
                     # This is how CBO 'views' the graph.
                     # Always sample from the exogenous model at the root node and independent cause variables -- unless other models are specified
+                    # TODO: replace with marginals
                     f[v] = self._make_white_noise_fnc()
                 else:
-                    f[v] = self._make_static_fnc(moment)
+                    # Check if v has a common cause with other vertices in this time-slice sub-graph
+                    if v in self.common_cause_children:
+                        f[v] = self._make_static_fnc(moment, common_cause_child=v)
+                    else:
+                        assert len(self.common_cause_children) == 0
+                        f[v] = self._make_static_fnc(moment)
             return f
 
         def dynamic(self, moment: int):
@@ -95,6 +112,7 @@ def auto_sem_hat(
                         v
                         o Child node at time t
                     """
+                    # TODO: replace with marginals
                     f[v] = self._make_white_noise_fnc()
                 elif i == 0 and not independent_causes[v]:
                     """
@@ -127,7 +145,12 @@ def auto_sem_hat(
                     """
                     f[v] = self._make_only_dynamic_transfer_fnc(moment)
                 else:
-                    f[v] = self._make_dynamic_fnc(moment)
+                    # Check if v has a common cause with other vertices in this time-slice sub-graph
+                    if v in self.common_cause_children:
+                        f[v] = self._make_dynamic_fnc(moment, common_cause_child=v)
+                    else:
+                        assert len(self.common_cause_children) == 0
+                        f[v] = self._make_dynamic_fnc(moment)
             return f
 
     return SEMHat

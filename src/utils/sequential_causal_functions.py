@@ -88,7 +88,7 @@ def sequential_sample_from_model(
     return sample
 
 
-def sequential_sample_from_complex_model_hat(
+def sequential_sample_from_model_hat(
     static_sem,
     dynamic_sem,
     timesteps: int,
@@ -100,7 +100,6 @@ def sequential_sample_from_complex_model_hat(
     """
     Function to sequentially sample a dynamic Bayesian network using ESTIMATED SEMs.
     Currently function approximations are done using Gaussian processes.
-    This function handles far more complex graphs.
     """
     # A specific noise-model has not been provided so we use standard Gaussian noise
     if seed is not None:
@@ -139,8 +138,7 @@ def sequential_sample_from_complex_model_hat(
                 elif initial_values:
                     sample[var][temporal_index] = initial_values[var]
 
-                # If neither interventions nor initial values are provided
-                # so sample the model with provided epsilon, if exists
+                # If neither interventions nor initial values are provided; sample the model
                 else:
                     if node_parents[node]:
                         if temporal_index == 0:
@@ -150,17 +148,17 @@ def sequential_sample_from_complex_model_hat(
                             if emit_vars:
                                 sample[var][temporal_index] = function(temporal_index, emit_vars, sample)
                             elif not emit_vars:
+                                # TODO: this needs to be replaced by the marginal
                                 sample[var][temporal_index] = function()
                             else:
                                 raise ValueError("There are no parents!", emit_vars)
                     else:
+                        # TODO: this needs to be replaced by the marginal
                         sample[var][temporal_index] = function()
 
         else:
             assert dynamic_sem is not None
-            # Dynamically propagate the samples through the graph using estimated SEMs.
-            # If we have found an optimal interventional target response from t-1,
-            # it has been included in the intervention dictionary at the correct index.
+            # Dynamically propagate the samples through the graph using estimated SEMs. If we have found an optimal interventional target response from t-1, it has been included in the intervention dictionary at the correct index.
 
             for var, function in dynamic_sem.items():
                 time = str(temporal_index)
@@ -210,7 +208,7 @@ def sequentially_sample_model(
     for i in range(sample_count):
         # This option uses the estimates of the SEMs, estimates found through use of GPs.
         if use_sem_estimate:
-            tmp = sequential_sample_from_complex_model_hat(
+            tmp = sequential_sample_from_model_hat(
                 static_sem=static_sem,
                 dynamic_sem=dynamic_sem,
                 timesteps=total_timesteps,
