@@ -2,6 +2,7 @@ from copy import deepcopy
 from itertools import combinations
 from typing import Dict, Tuple
 from networkx import MultiDiGraph
+from networkx.convert import to_dict_of_lists
 from numpy.core import hstack
 
 from ..gp_utils import fit_gp
@@ -122,14 +123,11 @@ def get_emissions_input_output_pairs(
     The intended usage for this function is when the emission vertice outgoing degree is exactly equal to one. E.g. a DAG structure like X <-- Z --> Y is supported but X <-- Z --> Y <-- W is currently not.
     """
 
-    node_children = {node: None for node in G.nodes}
-    node_parents = {node: None for node in G.nodes}
-
     # Children of all nodes
-    for node in G.nodes:
-        node_children[node] = list(G.successors(node))
+    node_children = to_dict_of_lists(G)
 
     #  Parents of all nodes
+    node_parents = {node: None for node in G.nodes}
     for node in G.nodes:
         node_parents[node] = tuple(G.predecessors(node))
 

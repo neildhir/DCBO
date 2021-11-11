@@ -31,7 +31,7 @@ def auto_sem_hat(
     Notes
     -----
     1. We have _NOT_ covered all network topologies with this function. Beware.
-    2. This function should eventually be passed the full adjacency matrix for the graph.
+    2. This function will eventually be passed the full adjacency matrix for the graph and we will essence create a simulator for the entries in that matrix.
 
     Returns
     -------
@@ -133,6 +133,7 @@ def auto_sem_hat(
                       \ v
                         o Child node at time t
                     """
+                    # TODO: replace with marginals
                     f[v] = self._make_white_noise_fnc()
                 elif i > 0 and not summary_graph_node_parents[v]:
                     """
