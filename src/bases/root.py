@@ -84,6 +84,11 @@ class Root:
         self.index_name = 0
         self.number_of_trials = number_of_trials
 
+        #   ------------- GRAPH STUFF to be replaced by a non-symetric adjacency matrix
+
+        # TODO: move all of this since BO and ABO don't need to this since they don't use any of it.
+        # TODO: walk through each variable and see which ones are actually used inside BO and ABO.
+
         #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
         time_slice_vars = observation_samples.keys()
         self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
@@ -94,6 +99,8 @@ class Root:
 
         # Fit Gaussian processes
         self.sem_emit_fncs = fit_sem_emit_fncs(self.observational_samples, self.emission_pairs)
+
+        #   ------------- GRAPH STUFF to be replaced by a non-symetric adjacency matrix
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task
