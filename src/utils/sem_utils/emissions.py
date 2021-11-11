@@ -3,11 +3,49 @@ from itertools import combinations
 from typing import Dict, Tuple
 from networkx import MultiDiGraph
 from networkx.convert import to_dict_of_lists
-from numpy.core import hstack
+from numpy import hstack, array, where
+
+from src.utils.dag_utils.adjacency_matrix_utils import get_emit_and_trans_adjacency_mats
 
 from ..gp_utils import fit_gp
 from ..utilities import update_emission_pairs_keys
 from ..dag_utils.graph_functions import get_subgraph
+
+
+def fit_sem_emit_fncs_v2(G: MultiDiGraph, D_obs: dict) -> dict:
+
+    # Emission adjacency matrix
+    E_A_mat, _, T = get_emit_and_trans_adjacency_mats(G)
+    nodes = array(G.nodes())
+    # Boolean list of all leaf/source nodes/vertices in G (confounders are not included)
+    sources = nodes[~E_A_mat.sum(axis=0).astype(bool)].tolist()
+    fncs = {t: {} for t in range(T)}
+
+    # TODO: need to also consider the case when two nodes in the same slice have the same parent.
+    if where(E_A_mat.sum(axis=1) > 1)[0]:
+        pass
+
+    for i, v in enumerate(nodes):
+        var, t = v.split("_")
+        t = int(t)
+        if sources[i]:
+            # This is a source node so we need to find the marginal from the observational data.
+            xx = D_obs[var][:, t].reshape(-1, 1)
+            # TODO: need to use a KDE to find the density for this source
+        else:
+            # Parents of estimand variable (does not include transition variables)
+
+            # TODO: take the powerset of this if it larger than len() == 1
+            pa_y = [v.split("_")[0] for v in nodes[where(E_A_mat[:, i] == 1)[0]]]
+            xx = hstack(D_obs[vv][:, t].reshape(-1, 1) for vv in pa_y)
+            # Estimand
+            yy = D_obs[var][:, t].reshape(-1, 1)
+
+        #  Basic checks
+        assert len(xx.shape) == 2
+        assert len(yy.shape) == 2
+        #  Fit estimator
+        fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
 
 
 def fit_sem_emit_fncs(observational_samples: dict, emission_pairs: dict) -> dict:

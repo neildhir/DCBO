@@ -13,10 +13,10 @@ def get_emit_and_trans_adjacency_mats(G):
     n = int(n)
     A = asarray(adjacency_matrix(G).todense())
     if T == 1:
-        return (block_diag_view(A[0:n, 0:n], T), None)
+        return block_diag_view(A[0:n, 0:n], T), None, T
     else:
         # return (emission adjacency matrix, transition adjacency matrix)
-        return (block_diag_view(A[0:n, 0:n], T), get_off_diagonal_trans_mat(A, n, T))
+        return block_diag_view(A[0:n, 0:n], T), get_off_diagonal_trans_mat(A, n, T), T
 
 
 def block_diag_view(block_mat, block_repeats):
