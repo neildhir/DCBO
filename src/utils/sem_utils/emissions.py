@@ -19,26 +19,27 @@ def fit_sem_emit_fncs_v2(G: MultiDiGraph, D_obs: dict) -> dict:
     emit_adj_mat, _, T = get_emit_and_trans_adjacency_mats(G)
     nodes = array(G.nodes())
     fncs = {t: {} for t in range(T)}
+    time_slice_parents = emit_adj_mat.sum(axis=0).astype(bool)
 
     # Each node in this list is a parent to more than one child node
     fork_idx = where(emit_adj_mat.sum(axis=1) > 1)[0]
     fork_nodes = nodes[fork_idx]
-    if fork_nodes:
+    if any(fork_nodes):
+        Ch_fork = []
         for i, v in zip(fork_idx, fork_nodes):
             #  Get children / estimands
-            ch = nodes[where(emit_adj_mat[i, :] == 1)]
+            ch = nodes[where(emit_adj_mat[i, :] == 1)].tolist()
             var, t = v.split("_")
             t = int(t)
             xx = D_obs[var][:, t].reshape(-1, 1)
             for j, y in enumerate(ch):
                 # Estimand
-                var, _ = y.split("_")
-                yy = D_obs[var][:, t].reshape(-1, 1)
+                var_y, _ = y.split("_")
+                yy = D_obs[var_y][:, t].reshape(-1, 1)
                 # Fit estimator
-                fncs[t][tuple(var, j)] = fit_gp(x=xx, y=yy)
+                fncs[t][(var, j, var_y)] = fit_gp(x=xx, y=yy)
+            Ch_fork += ch
 
-    #  KDE usage counter
-    k = 0
     for i, v in enumerate(nodes):
         var, t = v.split("_")
         t = int(t)
@@ -46,30 +47,29 @@ def fit_sem_emit_fncs_v2(G: MultiDiGraph, D_obs: dict) -> dict:
             # This is a source node so we need to find the marginal from the observational data.
             xx = D_obs[var][:, t].reshape(-1, 1)
             # Fit estimator
-            fncs[t][(None, k)] = KernelDensity(kernel="gaussian").fit(xx)
-            k += 1
-        elif v in fork_nodes:
+            fncs[t][(None, var)] = KernelDensity(kernel="gaussian").fit(xx)
+        elif v in Ch_fork:
             #  We have already dealt with the source node in fork structures
             pass
-        else:
+        elif time_slice_parents[i]:
             # Parents of estimand variable (does not include transition variables), we could use G.predecessors(v) but it includes the transition variables.
             pa_y = [vv.split("_")[0] for vv in nodes[where(emit_adj_mat[:, i] == 1)[0]]]
+            # Estimand
+            yy = D_obs[var][:, t].reshape(-1, 1)
             if len(pa_y) == 0:
                 #  This node only has incoming edges from the past time-slice
                 pass
+            # TODO: We may not even need this
             if len(pa_y) > 1:
-                # Estimand
-                yy = D_obs[var][:, t].reshape(-1, 1)
                 #  Loop over all possible powersets
+                # TODO: but this should only happen once the Estimand is actually the target node
                 for s in powerset(pa_y):
-                    xx = hstack((D_obs[vv][:, t].reshape(-1, 1) for vv in s))
+                    xx = hstack([D_obs[vv][:, t].reshape(-1, 1) for vv in s])
                     #  Fit estimator
                     fncs[t][s] = fit_gp(x=xx, y=yy)
             else:
                 #  Regressors / independent variables
                 xx = D_obs[pa_y[0]][:, t].reshape(-1, 1)
-                # Estimand
-                yy = D_obs[var][:, t].reshape(-1, 1)
                 #  Fit estimator
                 fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
 
