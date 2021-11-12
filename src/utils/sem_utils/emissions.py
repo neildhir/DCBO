@@ -4,48 +4,76 @@ from typing import Dict, Tuple
 from networkx import MultiDiGraph
 from networkx.convert import to_dict_of_lists
 from numpy import hstack, array, where
+from sklearn.neighbors import KernelDensity
 
 from src.utils.dag_utils.adjacency_matrix_utils import get_emit_and_trans_adjacency_mats
 
 from ..gp_utils import fit_gp
-from ..utilities import update_emission_pairs_keys
+from ..utilities import powerset, update_emission_pairs_keys
 from ..dag_utils.graph_functions import get_subgraph
 
 
 def fit_sem_emit_fncs_v2(G: MultiDiGraph, D_obs: dict) -> dict:
 
     # Emission adjacency matrix
-    E_A_mat, _, T = get_emit_and_trans_adjacency_mats(G)
+    emit_adj_mat, _, T = get_emit_and_trans_adjacency_mats(G)
     nodes = array(G.nodes())
-    # Boolean list of all leaf/source nodes/vertices in G (confounders are not included)
-    sources = nodes[~E_A_mat.sum(axis=0).astype(bool)].tolist()
     fncs = {t: {} for t in range(T)}
 
-    # TODO: need to also consider the case when two nodes in the same slice have the same parent.
-    if where(E_A_mat.sum(axis=1) > 1)[0]:
-        pass
+    # Each node in this list is a parent to more than one child node
+    fork_idx = where(emit_adj_mat.sum(axis=1) > 1)[0]
+    fork_nodes = nodes[fork_idx]
+    if fork_nodes:
+        for i, v in zip(fork_idx, fork_nodes):
+            #  Get children / estimands
+            ch = nodes[where(emit_adj_mat[i, :] == 1)]
+            var, t = v.split("_")
+            t = int(t)
+            xx = D_obs[var][:, t].reshape(-1, 1)
+            for j, y in enumerate(ch):
+                # Estimand
+                var, _ = y.split("_")
+                yy = D_obs[var][:, t].reshape(-1, 1)
+                # Fit estimator
+                fncs[t][tuple(var, j)] = fit_gp(x=xx, y=yy)
 
+    #  KDE usage counter
+    k = 0
     for i, v in enumerate(nodes):
         var, t = v.split("_")
         t = int(t)
-        if sources[i]:
+        if G.in_degree[v] == 0:
             # This is a source node so we need to find the marginal from the observational data.
             xx = D_obs[var][:, t].reshape(-1, 1)
-            # TODO: need to use a KDE to find the density for this source
+            # Fit estimator
+            fncs[t][(None, k)] = KernelDensity(kernel="gaussian").fit(xx)
+            k += 1
+        elif v in fork_nodes:
+            #  We have already dealt with the source node in fork structures
+            pass
         else:
-            # Parents of estimand variable (does not include transition variables)
+            # Parents of estimand variable (does not include transition variables), we could use G.predecessors(v) but it includes the transition variables.
+            pa_y = [vv.split("_")[0] for vv in nodes[where(emit_adj_mat[:, i] == 1)[0]]]
+            if len(pa_y) == 0:
+                #  This node only has incoming edges from the past time-slice
+                pass
+            if len(pa_y) > 1:
+                # Estimand
+                yy = D_obs[var][:, t].reshape(-1, 1)
+                #  Loop over all possible powersets
+                for s in powerset(pa_y):
+                    xx = hstack((D_obs[vv][:, t].reshape(-1, 1) for vv in s))
+                    #  Fit estimator
+                    fncs[t][s] = fit_gp(x=xx, y=yy)
+            else:
+                #  Regressors / independent variables
+                xx = D_obs[pa_y[0]][:, t].reshape(-1, 1)
+                # Estimand
+                yy = D_obs[var][:, t].reshape(-1, 1)
+                #  Fit estimator
+                fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
 
-            # TODO: take the powerset of this if it larger than len() == 1
-            pa_y = [v.split("_")[0] for v in nodes[where(E_A_mat[:, i] == 1)[0]]]
-            xx = hstack(D_obs[vv][:, t].reshape(-1, 1) for vv in pa_y)
-            # Estimand
-            yy = D_obs[var][:, t].reshape(-1, 1)
-
-        #  Basic checks
-        assert len(xx.shape) == 2
-        assert len(yy.shape) == 2
-        #  Fit estimator
-        fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
+    return fncs
 
 
 def fit_sem_emit_fncs(observational_samples: dict, emission_pairs: dict) -> dict:
