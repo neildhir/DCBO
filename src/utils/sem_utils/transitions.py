@@ -1,6 +1,37 @@
+from networkx.classes import multidigraph
+from src.utils.dag_utils.adjacency_matrix_utils import get_emit_and_trans_adjacency_mats
 from ..gp_utils import fit_gp
 from typing import Dict
-from numpy import hstack
+from numpy import array, hstack, where
+
+
+def fit_sem_trans_fncs_v2(G: multidigraph, D_obs: dict) -> dict:
+    # OBS: this function assumes that transition relationships are first-order Markov only. The code needs to modified if longer-range dependencies need to be encoded.
+
+    # Emission adjacency matrix
+    _, trans_adj_mat, T = get_emit_and_trans_adjacency_mats(G)
+    nodes = array(G.nodes())
+    # Number of nodes per time-slice
+    v_n = len(nodes) / T
+    assert v_n.is_integer()
+    fncs = {t: {} for t in range(T)}
+
+    for i, v in enumerate(nodes[int(v_n) :], start=T):
+        var, t = v.split("_")
+        t = int(t)
+        # Parents of estimand variable, we could use G.predecessors(v) but it includes the emission variables.
+        pa_y = [vv.split("_")[0] for vv in nodes[where(trans_adj_mat[:, i] == 1)[0]]]
+        # Estimand
+        yy = D_obs[var][:, t].reshape(-1, 1)
+        if len(pa_y) == 0:
+            # This node has no incoming edges from the past time-slice
+            pass
+        else:
+            xx = hstack([D_obs[vv][:, t].reshape(-1, 1) for vv in pa_y])
+            #  Fit estimator
+            fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
+
+    return fncs
 
 
 def fit_sem_trans_fncs(observational_samples, transfer_pairs: dict) -> dict:
