@@ -1,5 +1,6 @@
 from collections import OrderedDict
 from typing import Callable, Dict
+from networkx import MultiDiGraph
 
 from numpy.random import randn
 
@@ -152,6 +153,138 @@ def auto_sem_hat(
                     else:
                         assert len(self.common_cause_children) == 0
                         f[v] = self._make_dynamic_fnc(moment)
+            return f
+
+    return SEMHat
+
+
+def auto_sem_hat_v2(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = None,) -> classmethod:
+    """
+    This function is used to automatically create the SEM -function estimates for the edges in a given graph.
+
+    Parameters
+    ----------
+    emission_functions : dict
+        A dictionary of fitted emission functions (roughly most horizontal edges in the DAG).
+    transition_functions : dict
+        A dictionary of fitted transition functions (roughly most vertical edges in the DAG)..
+
+    Notes
+    -----
+    1. We have _NOT_ covered all network topologies with this function. Beware.
+
+    Returns
+    -------
+    classmethod
+        A SEM estimate found using observational data only; used in finding the optimal intervention set and values for CBO and DCBO.
+    """
+
+    class SEMHat:
+        def __init__(self):
+            T = G.T  # TODO: add this method to G before passing it in here
+            nodes = G.nodes()
+            # Number of nodes per time-slice
+            n_t = len(nodes) / T
+            assert n_t.is_integer()
+            #  Causally ordered vertices in each time-slice
+            self.V_t = [v.split("_")[0] for v in nodes[: int(n_t)]]
+
+        @staticmethod
+        def _make_marginal() -> Callable:
+            #  Assigns the KDE for the marginal
+            return lambda t, emit_input_vars, _: emission_fncs[t][emit_input_vars].sample()
+
+        @staticmethod
+        def _make_emit_fnc(moment: int) -> Callable:
+            #  Within time-slice emission only
+            return lambda t, emit_input_vars, sample: emission_fncs[t][emit_input_vars].predict(
+                select_sample(sample, emit_input_vars, t)
+            )[moment]
+
+        @staticmethod
+        def _make_trans_fnc(moment: int) -> Callable:
+            #  Only transition between time-slices (only valid for first-order Markov assumption)
+            return lambda t, transfer_input_vars, _, sample: transition_fncs[transfer_input_vars].predict(
+                select_sample(sample, transfer_input_vars, t - 1)
+            )[moment]
+
+        @staticmethod
+        def _make_emit_plus_trans_fnc(moment: int) -> Callable:
+            #  Transition plus within-slice emission(s)
+            return (
+                lambda t, transfer_input_vars, emit_input_vars, sample: transition_fncs[transfer_input_vars].predict(
+                    select_sample(sample, transfer_input_vars, t - 1)
+                )[moment]
+                + emission_fncs[t][emit_input_vars].predict(select_sample(sample, emit_input_vars, t))[moment]
+            )
+
+        def static(self, moment: int):
+            assert moment in [0, 1], moment
+            # SEM functions
+            f = OrderedDict()
+            # Assumes that the keys are causally ordered
+            for v in self.V_t:
+                if something:
+                    f[v] = self._make_marginal()
+                else:
+                    f[v] = self._make_emit_fnc(moment)
+            return f
+
+        def dynamic(self, moment: int):
+            assert moment in [0, 1], moment
+            # SEM functions
+            f = OrderedDict()
+            # Variables are causally ordered
+            for i, v in enumerate(summary_graph_node_parents):
+                if i == 0 and independent_causes[v]:
+                    """
+                    Variable at the root of the time-slice, without any time dependence
+                  t-1   t
+                    o   x Node at time t (assumes only _ONE_ independent cause)
+                        |
+                        v
+                        o Child node at time t
+                    """
+                    # TODO: replace with marginals
+                    f[v] = self._make_marginal()
+                elif i == 0 and not independent_causes[v]:
+                    """
+                    Root node in the time-slice, with time dependence
+                  t-1   t
+                    o-->x Node at time t with dependence from time t-1
+                        |
+                        v
+                        o
+                    """
+                    assert not summary_graph_node_parents[v], summary_graph_node_parents
+                    f[v] = self._make_trans_fnc(moment)
+                elif i > 0 and independent_causes[v] and not summary_graph_node_parents[v]:
+                    """
+                    Variable in the time-slice, without any time dependence
+                        o Node at time t
+                    x   |
+                      \ v
+                        o Child node at time t
+                    """
+                    # TODO: replace with marginals
+                    f[v] = self._make_marginal()
+                elif i > 0 and not summary_graph_node_parents[v]:
+                    """
+                    Node in the time-slice, with time dependence
+                  t-1   t
+                        o
+                        ^
+                        |
+                    o-->x Node at time t with dependence from time t-1
+                    """
+                    f[v] = self._make_trans_fnc(moment)
+                else:
+                    # Check if v has a common cause with other vertices in this time-slice sub-graph
+                    if v in self.common_cause_children:
+                        f[v] = self._make_emit_plus_trans_fnc(moment, common_cause_child=v)
+                    else:
+                        assert len(self.common_cause_children) == 0
+                        f[v] = self._make_emit_plus_trans_fnc(moment)
             return f
 
     return SEMHat

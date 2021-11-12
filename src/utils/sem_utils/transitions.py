@@ -25,7 +25,7 @@ def fit_sem_trans_fncs_v2(G: multidigraph, D_obs: dict) -> dict:
         yy = D_obs[var][:, t].reshape(-1, 1)
         if len(pa_y) == 0:
             # This node has no incoming edges from the past time-slice
-            pass
+            continue
         else:
             xx = hstack([D_obs[vv][:, t].reshape(-1, 1) for vv in pa_y])
             #  Fit estimator

@@ -9,7 +9,7 @@ from sklearn.neighbors import KernelDensity
 from src.utils.dag_utils.adjacency_matrix_utils import get_emit_and_trans_adjacency_mats
 
 from ..gp_utils import fit_gp
-from ..utilities import powerset, update_emission_pairs_keys
+from ..utilities import update_emission_pairs_keys
 from ..dag_utils.graph_functions import get_subgraph
 
 
