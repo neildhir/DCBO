@@ -24,8 +24,8 @@ def fit_sem_emit_fncs_v2(G: MultiDiGraph, D_obs: dict) -> dict:
     # Each node in this list is a parent to more than one child node
     fork_idx = where(emit_adj_mat.sum(axis=1) > 1)[0]
     fork_nodes = nodes[fork_idx]
+    Ch_fork = []
     if any(fork_nodes):
-        Ch_fork = []
         for i, v in zip(fork_idx, fork_nodes):
             #  Get children / estimands
             ch = nodes[where(emit_adj_mat[i, :] == 1)].tolist()
@@ -50,7 +50,7 @@ def fit_sem_emit_fncs_v2(G: MultiDiGraph, D_obs: dict) -> dict:
             fncs[t][(None, var)] = KernelDensity(kernel="gaussian").fit(xx)
         elif v in Ch_fork:
             #  We have already dealt with the source node in fork structures
-            pass
+            continue
         elif time_slice_parents[i]:
             # Parents of estimand variable (does not include transition variables), we could use G.predecessors(v) but it includes the transition variables.
             pa_y = [vv.split("_")[0] for vv in nodes[where(emit_adj_mat[:, i] == 1)[0]]]
@@ -58,20 +58,13 @@ def fit_sem_emit_fncs_v2(G: MultiDiGraph, D_obs: dict) -> dict:
             yy = D_obs[var][:, t].reshape(-1, 1)
             if len(pa_y) == 0:
                 #  This node only has incoming edges from the past time-slice
-                pass
-            # TODO: We may not even need this
-            if len(pa_y) > 1:
-                #  Loop over all possible powersets
-                # TODO: but this should only happen once the Estimand is actually the target node
-                for s in powerset(pa_y):
-                    xx = hstack([D_obs[vv][:, t].reshape(-1, 1) for vv in s])
-                    #  Fit estimator
-                    fncs[t][s] = fit_gp(x=xx, y=yy)
+                continue
             else:
-                #  Regressors / independent variables
-                xx = D_obs[pa_y[0]][:, t].reshape(-1, 1)
-                #  Fit estimator
-                fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
+                for i in pa_y:
+                    #  Regressors / independent variables
+                    xx = D_obs[pa_y[0]][:, t].reshape(-1, 1)
+                    #  Fit estimator
+                    fncs[t][tuple(i)] = fit_gp(x=xx, y=yy)
 
     return fncs
 
