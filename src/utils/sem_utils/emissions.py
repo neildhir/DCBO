@@ -21,7 +21,7 @@ def fit_sem_emit_fncs_v2(G: MultiDiGraph, D_obs: dict) -> dict:
     fncs = {t: {} for t in range(T)}
     time_slice_parents = emit_adj_mat.sum(axis=0).astype(bool)
 
-    # Each node in this list is a parent to more than one child node
+    # Each node in this list is a parent to more than one child node i.e. Y <-- X --> Z
     fork_idx = where(emit_adj_mat.sum(axis=1) > 1)[0]
     fork_nodes = nodes[fork_idx]
     Ch_fork = []
