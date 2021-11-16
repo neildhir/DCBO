@@ -271,7 +271,7 @@ def run_all_opt_models(
 
         print("\n\t>>>" + method + "\n")
         model = algorithm(**alg_input_params)
-        model.run_optimization()
+        model.run()()
         models_list.append(model)
 
     return models_list, names_list

@@ -13,22 +13,40 @@ from ..utilities import update_emission_pairs_keys
 from ..dag_utils.graph_functions import get_subgraph
 
 
-def fit_sem_emit_fncs_v2(G: MultiDiGraph, D_obs: dict) -> dict:
+def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
+    """
+    Fit within time-slice estimated SEM.
+
+    Parameters
+    ----------
+    G : MultiDiGraph
+        Causal DAG
+    D_obs : dict
+        Observational samples from the true system
+
+    Returns
+    -------
+    dict
+        Dictionary containing the estimated SEM functions
+    """
 
     # Emission adjacency matrix
-    emit_adj_mat, _, T = get_emit_and_trans_adjacency_mats(G)
+    emit_adj_mat, _ = get_emit_and_trans_adjacency_mats(G)
+    #  Binary matrix which keeps track of which edges have been fitted
+    edge_fit_mat = deepcopy(emit_adj_mat)
+    T = G.T
     nodes = array(G.nodes())
     fncs = {t: {} for t in range(T)}
-    time_slice_parents = emit_adj_mat.sum(axis=0).astype(bool)
 
     # Each node in this list is a parent to more than one child node i.e. Y <-- X --> Z
     fork_idx = where(emit_adj_mat.sum(axis=1) > 1)[0]
     fork_nodes = nodes[fork_idx]
-    Ch_fork = []
+
     if any(fork_nodes):
         for i, v in zip(fork_idx, fork_nodes):
-            #  Get children / estimands
-            ch = nodes[where(emit_adj_mat[i, :] == 1)].tolist()
+            #  Get children / independents
+            coords = where(emit_adj_mat[i, :] == 1)[0]
+            ch = nodes[coords].tolist()
             var, t = v.split("_")
             t = int(t)
             xx = D_obs[var][:, t].reshape(-1, 1)
@@ -38,38 +56,40 @@ def fit_sem_emit_fncs_v2(G: MultiDiGraph, D_obs: dict) -> dict:
                 yy = D_obs[var_y][:, t].reshape(-1, 1)
                 # Fit estimator
                 fncs[t][(var, j, var_y)] = fit_gp(x=xx, y=yy)
-            Ch_fork += ch
+                # Update edge tracking matrix
+                edge_fit_mat[i, coords[j]] -= 1
 
-    for i, v in enumerate(nodes):
+    # Assign estimators to source nodes
+    for v in [vv for vv in dict(G.in_degree) if G.in_degree(vv) == 0]:
         var, t = v.split("_")
         t = int(t)
-        if G.in_degree[v] == 0:
-            # This is a source node so we need to find the marginal from the observational data.
-            xx = D_obs[var][:, t].reshape(-1, 1)
-            # Fit estimator
-            fncs[t][(None, var)] = KernelDensity(kernel="gaussian").fit(xx)
-        elif v in Ch_fork:
-            #  We have already dealt with the source node in fork structures
-            continue
-        elif time_slice_parents[i]:
-            # Parents of estimand variable (does not include transition variables), we could use G.predecessors(v) but it includes the transition variables.
-            pa_y = [vv.split("_")[0] for vv in nodes[where(emit_adj_mat[:, i] == 1)[0]]]
-            # Estimand
-            yy = D_obs[var][:, t].reshape(-1, 1)
-            if len(pa_y) == 0:
-                #  This node only has incoming edges from the past time-slice
-                continue
-            else:
-                for i in pa_y:
-                    #  Regressors / independent variables
-                    xx = D_obs[pa_y[0]][:, t].reshape(-1, 1)
-                    #  Fit estimator
-                    fncs[t][tuple(i)] = fit_gp(x=xx, y=yy)
+        # This is a source node so we need to find the marginal from the observational data.
+        xx = D_obs[var][:, t].reshape(-1, 1)
+        # Fit estimator
+        fncs[t][(None, var)] = KernelDensity(kernel="gaussian").fit(xx)
+
+    # Check remaining un-estimated edges
+    for i, j in zip(*where(edge_fit_mat == 1)):
+        pa_y, t_pa = nodes[i].split("_")
+        y, t_y = nodes[j].split("_")
+        assert t_pa == t_y
+        t = int(t_y)
+        # Regressor/Independent
+        xx = D_obs[pa_y][:, t].reshape(-1, 1)
+        # Estimand
+        yy = D_obs[y][:, t].reshape(-1, 1)
+        #  Fit estimator
+        fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
+        # Update edge tracking matrix
+        edge_fit_mat[i, j] -= 1
+
+    #  The edge-tracking matrix should be zero at the end.
+    assert edge_fit_mat.sum() == 0
 
     return fncs
 
 
-def fit_sem_emit_fncs(observational_samples: dict, emission_pairs: dict) -> dict:
+def fit_sem_emit_fncs_old(observational_samples: dict, emission_pairs: dict) -> dict:
     """
     Function fits a Gaussian process to all source-sink (cause-effect) relationships in the causal Bayesian network provided.
 

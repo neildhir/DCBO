@@ -5,11 +5,12 @@ from typing import Dict
 from numpy import array, hstack, where
 
 
-def fit_sem_trans_fncs_v2(G: multidigraph, D_obs: dict) -> dict:
+def fit_sem_trans_fncs(G: multidigraph, D_obs: dict) -> dict:
     # OBS: this function assumes that transition relationships are first-order Markov only. The code needs to modified if longer-range dependencies need to be encoded.
 
+    T = G.T
     # Emission adjacency matrix
-    _, trans_adj_mat, T = get_emit_and_trans_adjacency_mats(G)
+    _, trans_adj_mat = get_emit_and_trans_adjacency_mats(G)
     nodes = array(G.nodes())
     # Number of nodes per time-slice
     v_n = len(nodes) / T
@@ -34,7 +35,7 @@ def fit_sem_trans_fncs_v2(G: multidigraph, D_obs: dict) -> dict:
     return fncs
 
 
-def fit_sem_trans_fncs(observational_samples, transfer_pairs: dict) -> dict:
+def fit_sem_trans_fncs_old(observational_samples, transfer_pairs: dict) -> dict:
 
     # Store function which concern t-1 --> t
     transition_functions = {}

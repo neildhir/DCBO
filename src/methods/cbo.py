@@ -1,7 +1,5 @@
-"""
-Main CBO class.
-"""
 from typing import Callable
+
 import numpy as np
 from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
 from GPy.core import Mapping
@@ -10,11 +8,13 @@ from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
 from numpy import squeeze
 from numpy.core.multiarray import ndarray
+from sklearn.neighbors import KernelDensity
 from src.bases.root import Root
 from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
 from src.utils.gp_utils import fit_gp
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs
 from src.utils.utilities import (
     assign_blanket,
     check_blanket,
@@ -90,12 +90,12 @@ class CBO(Root):
         self.seed = seed
         self.sample_anchor_points = sample_anchor_points
         self.seed_anchor_points = seed_anchor_points
-        # Convert observational samples to dict of temporal lists.
-        # We do this because at each time-index we may have a different number of samples.
-        # Because of this, samples need to be stored one lists per time-step.
+        # Fit Gaussian processes to emissions
+        self.sem_emit_fncs = fit_sem_emit_fncs(self.G, self.observational_samples)
+        # Convert observational samples to dict of temporal lists. We do this because at each time-index we may have a different number of samples. Because of this, samples need to be stored one lists per time-step.
         self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
 
-    def run_optimization(self):
+    def run(self):
 
         if self.debug_mode:
             assert self.ground_truth is not None, "Provide ground truth to plot surrogate models"
@@ -119,6 +119,7 @@ class CBO(Root):
             self._update_observational_data(temporal_index=temporal_index)
             self._update_interventional_data(temporal_index=temporal_index)
 
+            #  Online run option
             if temporal_index > 0 and (self.online or isinstance(self.n_obs_t, list)):
                 self._update_sem_emit_fncs(temporal_index)
 
@@ -341,30 +342,29 @@ class CBO(Root):
                 self.interventional_data_x[temporal_index][var] = self.interventional_data_x[temporal_index - 1][var]
                 self.interventional_data_y[temporal_index][var] = self.interventional_data_y[temporal_index - 1][var]
 
-    def _update_sem_emit_fncs(self, temporal_index: int) -> None:
+    def _update_sem_emit_fncs(self, t: int) -> None:
 
-        for inputs in self.sem_emit_fncs[temporal_index].keys():
-            output = self.emission_pairs[inputs].split("_")[0]
-            if len(inputs) > 1:
+        # Loop over all emission functions in this time-slice
+        for pa in self.sem_emit_fncs[t]:
+            if len(pa) == 2 and pa[0] == None:
+                #  Source node
+                xx = make_column_shape_2D(self.observational_samples[pa[1]][t])
+                self.sem_emit_fncs[t][pa] = KernelDensity(kernel="gaussian").fit(xx)
+            elif len(pa) == 3 and isinstance(pa[1], int):
+                #  A fork in which a node has more than one child
+                xx = make_column_shape_2D(self.observational_samples[pa[0]][t])
+                yy = make_column_shape_2D(self.observational_samples[pa[2]][t])
+            else:
                 xx = []
-                for node in inputs:
-                    start_node, time = node.split("_")
-                    time = int(time)
-                    #  Input
-                    x = make_column_shape_2D(self.observational_samples[start_node][time])
+                #  Loop over all parents / explanatory variables
+                for v in pa:
+                    x = make_column_shape_2D(self.observational_samples[v][t])
                     xx.append(x)
                 xx = np.hstack(xx)
-                #  Output
-                yy = make_column_shape_2D(self.observational_samples[output][time])
-            elif len(inputs) == 1:
-                start_node, time = inputs[0].split("_")
-                time = int(time)
-                #  Input
-                xx = make_column_shape_2D(self.observational_samples[start_node][time])
-                #  Output
-                yy = make_column_shape_2D(self.observational_samples[output][time])
-            else:
-                raise ValueError("The length of the tuple is: {}".format(len(inputs)))
+                # Estimand
+                y = [vv for vv in self.G.successors(pa) if vv.split("_")[1] == str(t)]
+                assert len(y), (y, pa, t)
+                yy = make_column_shape_2D(self.observational_samples[y.split("_")[0]][t])
 
             assert len(xx.shape) == 2
             assert len(yy.shape) == 2
@@ -375,12 +375,12 @@ class CBO(Root):
                 xx = xx[: int(min_rows)]
                 yy = yy[: int(min_rows)]
 
-            if not self.sem_emit_fncs[temporal_index][inputs]:
-                self.sem_emit_fncs[temporal_index][inputs] = fit_gp(x=xx, y=yy)
+            if not self.sem_emit_fncs[t][pa]:
+                raise ValueError("Non-stationary DAG. Not yet implemented.")
             else:
                 # Update in-place
-                self.sem_emit_fncs[temporal_index][inputs].set_XY(X=xx, Y=yy)
-                self.sem_emit_fncs[temporal_index][inputs].optimize()
+                self.sem_emit_fncs[t][pa].set_XY(X=xx, Y=yy)
+                self.sem_emit_fncs[t][pa].optimize()
 
     def _update_bo_model(
         self, temporal_index: int, exploration_set: tuple, alpha: float = 2, beta: float = 0.5,

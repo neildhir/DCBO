@@ -76,15 +76,16 @@ class BaseClassDCBO(Root):
         }
         super().__init__(**root_args)
 
-        self.transfer_pairs = get_transition_input_output_pairs(self.node_parents)
+        # self.transfer_pairs = get_transition_input_output_pairs(self.node_parents)
         #  The fit emission function lives in the main class of the method
-        self.sem_trans_fncs = fit_sem_trans_fncs(self.observational_samples, self.transfer_pairs)
-        self.time_indexed_trans_fncs_inputs = {t: [] for t in range(1, self.T)}
-        for t in range(1, self.T):
-            for key in self.transfer_pairs.keys():
-                tt = int(self.transfer_pairs[key].split("_")[1])
-                if t == tt:
-                    self.time_indexed_trans_fncs_inputs[t].append(key)
+        self.sem_trans_fncs = fit_sem_trans_fncs(self.G, self.observational_samples)
+        # TODO: we probably dont' need this anymor
+        # self.time_indexed_trans_fncs_inputs = {t: [] for t in range(1, self.T)}
+        # for t in range(1, self.T):
+        #     for key in self.transfer_pairs.keys():
+        #         tt = int(self.transfer_pairs[key].split("_")[1])
+        #         if t == tt:
+        #             self.time_indexed_trans_fncs_inputs[t].append(key)
 
     def _update_sem_emit_fncs(self, temporal_index: int, temporal_index_data=None) -> None:
 

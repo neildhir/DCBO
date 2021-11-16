@@ -1,6 +1,3 @@
-"""
-Main ABO class.
-"""
 from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
 from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF
@@ -22,7 +19,6 @@ from src.utils.utilities import (
 from tqdm import trange
 
 
-# class ABO(BaseClassABO):
 class ABO(Root):
     def __init__(
         self,
@@ -81,7 +77,7 @@ class ABO(Root):
             self.mean_function[temporal_index][self.exploration_sets[0]] = standard_mean_function
             self.variance_function[temporal_index][self.exploration_sets[0]] = zero_variance_adjustment
 
-    def run_optimization(self):
+    def run(self):
 
         # Walk through the graph, from left to right, i.e. the temporal dimension
         for temporal_index in trange(self.T, desc="Time index"):

@@ -10,7 +10,7 @@ from numpy.core.numeric import nan
 from src.bayes_opt.cost_functions import define_costs
 from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
 from src.utils.gp_utils import update_sufficient_statistics, update_sufficient_statistics_hat
-from src.utils.sem_utils.emissions import fit_sem_emit_fncs, get_emissions_input_output_pairs
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs, fit_sem_emit_fncs_old, get_emissions_input_output_pairs
 from src.utils.sequential_causal_functions import sequentially_sample_model
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
@@ -70,6 +70,8 @@ class Root:
         self.make_sem_hat = make_sem_estimator
 
         assert isinstance(G, MultiDiGraph)
+        self.T = int(list(G.nodes())[-1].split("_")[-1]) + 1  # Total time-steps in DAG
+        G.T = self.T
         self.G = G
         self.debug_mode = debug_mode
         # Number of optimization restart for GPs
@@ -77,8 +79,6 @@ class Root:
         self.online = online
         self.use_mc = use_mc
 
-        # Total time-steps and sample count per time-step
-        _, self.T = observation_samples[list(observation_samples.keys())[0]].shape
         self.observational_samples = observation_samples
         self.base_target_variable = base_target_variable  # This has to be reflected in the CGM
         self.index_name = 0
@@ -90,15 +90,13 @@ class Root:
         # TODO: walk through each variable and see which ones are actually used inside BO and ABO.
 
         #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
-        time_slice_vars = observation_samples.keys()
-        self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
+        # time_slice_vars = observation_samples.keys()
+        # self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
         #  Checks what vars in DAG (if any) are independent causes (or 'sources' depending on your background)
-        self.independent_causes = get_independent_causes(time_slice_vars, G)
+        # self.independent_causes = get_independent_causes(time_slice_vars, G)
         # Extracted DAG properties
-        self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
+        # self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
 
-        # Fit Gaussian processes
-        self.sem_emit_fncs = fit_sem_emit_fncs(self.observational_samples, self.emission_pairs)
 
         #   ------------- GRAPH STUFF to be replaced by a non-symetric adjacency matrix
 
@@ -150,14 +148,14 @@ class Root:
 
         # Number of points where to evaluate acquisition function
         self.num_anchor_points = num_anchor_points
-
         # Assigned during optimisation
         self.mean_function = deepcopy(self.bo_model)
         self.variance_function = deepcopy(self.bo_model)
-
         # Store the dict for mean and var values computed in the acquisition function
-        self.mean_dict_store = {t: {es: {} for es in self.exploration_sets} for t in range(self.T)}
+        self.mean_dict_store = deepcopy(self.bo_model)
         self.var_dict_store = deepcopy(self.mean_dict_store)
+        # Target functions for Bayesian optimisation - ground truth
+        self.target_functions = deepcopy(self.bo_model)
 
         # For logging
         self.sequence_of_interventions_during_trials = [[] for _ in range(self.T)]
@@ -207,9 +205,6 @@ class Root:
             number_of_trials,
         )
         self.best_initial_es = initial_optimal_sequential_intervention_sets[0]  # 0 indexes the first time-step
-
-        # Target functions for Bayesian optimisation - ground truth
-        self.target_functions = {t: {es: None for es in self.exploration_sets} for t in range(self.T)}
 
         for temporal_index in range(self.T):
             for es in self.exploration_sets:

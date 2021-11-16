@@ -164,6 +164,8 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
 
     Parameters
     ----------
+    G : MultiDiGraph
+        Causal graphical model
     emission_functions : dict
         A dictionary of fitted emission functions (roughly most horizontal edges in the DAG).
     transition_functions : dict
@@ -171,7 +173,7 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
 
     Notes
     -----
-    1. We have _NOT_ covered all network topologies with this function. Beware.
+    We have _NOT_ covered all network topologies with this function. Beware.
 
     Returns
     -------
@@ -242,7 +244,7 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
                     #  Depends only on incoming transition edge(s)
                     f[v] = self._make_trans_fnc(moment)
                 elif all(vv.split("_")[1] == v.split("_")[1] for vv in G.predecessors(v)):
-                    #  Depends only an incoming emission edge(s) from this time-slice
+                    #  Depends only on incoming emission edge(s) from this time-slice
                     f[v] = self._make_emit_fnc(moment)
                 else:
                     #  Has incoming emission and transition edges
