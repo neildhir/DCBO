@@ -341,24 +341,30 @@ class CBO(Root):
         # Loop over all emission functions in this time-slice
         for pa in self.sem_emit_fncs[t]:
             if len(pa) == 2 and pa[0] == None:
+                pa_y = pa[1].split("_")[0]
                 #  Source node
-                xx = make_column_shape_2D(self.observational_samples[pa[1]][t])
-                self.sem_emit_fncs[t][pa] = KernelDensity(kernel="gaussian").fit(xx)
+                xx = make_column_shape_2D(self.observational_samples[pa_y][t])
+                self.sem_emit_fncs[t][pa_y] = KernelDensity(kernel="gaussian").fit(xx)
             elif len(pa) == 3 and isinstance(pa[1], int):
+                a, b = pa[0].split("_")[0], pa[2].split("_")[0]
                 #  A fork in which a node has more than one child
-                xx = make_column_shape_2D(self.observational_samples[pa[0]][t])
-                yy = make_column_shape_2D(self.observational_samples[pa[2]][t])
+                xx = make_column_shape_2D(self.observational_samples[a][t])
+                yy = make_column_shape_2D(self.observational_samples[b][t])
             else:
                 xx = []
                 #  Loop over all parents / explanatory variables
                 for v in pa:
-                    x = make_column_shape_2D(self.observational_samples[v][t])
+                    x = make_column_shape_2D(self.observational_samples[v.split("_")[0]][t])
                     xx.append(x)
                 xx = np.hstack(xx)
                 # Estimand (looks only at within time-slice targets)
-                y = [vv for vv in self.G.successors(pa) if vv.split("_")[1] == str(t)]
-                assert len(y) == 1, (y, pa, t)
-                yy = make_column_shape_2D(self.observational_samples[y[0].split("_")[0]][t])
+                ys = set.intersection(*map(set, [self.G.successors(v) for v in pa]))
+                if len(ys) == 1:
+                    pass
+                else:
+                    raise NotImplementedError("Have not covered DAGs with this type of connectivity.", (pa, ys))
+                for y in ys:
+                    yy = make_column_shape_2D(self.observational_samples[y.split("_")[0]][t])
 
             assert len(xx.shape) == 2
             assert len(yy.shape) == 2
@@ -369,12 +375,9 @@ class CBO(Root):
                 xx = xx[: int(min_rows)]
                 yy = yy[: int(min_rows)]
 
-            if not self.sem_emit_fncs[t][pa]:
-                raise ValueError("Non-stationary DAG. Not yet implemented.")
-            else:
-                # Update in-place
-                self.sem_emit_fncs[t][pa].set_XY(X=xx, Y=yy)
-                self.sem_emit_fncs[t][pa].optimize()
+            # Update in-place
+            self.sem_emit_fncs[t][pa].set_XY(X=xx, Y=yy)
+            self.sem_emit_fncs[t][pa].optimize()
 
     def _update_bo_model(
         self, temporal_index: int, exploration_set: tuple, alpha: float = 2, beta: float = 0.5,

@@ -134,9 +134,6 @@ def sequential_sample_from_model_hat_v2(
     for t in range(timesteps):
         if t == 0 or dynamic_sem is None:
             for var, function in static_sem.items():
-                time = str(t)
-                node = var + "_" + time
-
                 # Check that interventions and initial values at t=0 are not both provided
                 if interventions and initial_values:
                     if interventions[var][t] is not None and initial_values[var] is not None:
@@ -156,6 +153,8 @@ def sequential_sample_from_model_hat_v2(
 
                 # If neither interventions nor initial values are provided; sample the model
                 else:
+                    time = str(t)
+                    node = var + "_" + time
                     pa = G.predecessors(node)
                     if pa:
                         if t == 0:

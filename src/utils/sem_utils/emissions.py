@@ -55,7 +55,7 @@ def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
                 var_y, _ = y.split("_")
                 yy = D_obs[var_y][:, t].reshape(-1, 1)
                 # Fit estimator
-                fncs[t][(var, j, var_y)] = fit_gp(x=xx, y=yy)
+                fncs[t][(v, j, y)] = fit_gp(x=xx, y=yy)
                 # Update edge tracking matrix (removes entry (i,j) if it has been fitted)
                 edge_fit_mat[i, coords[j]] -= 1
 
@@ -66,7 +66,7 @@ def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
         # This is a source node so we need to find the marginal from the observational data.
         xx = D_obs[var][:, t].reshape(-1, 1)
         # Fit estimator
-        fncs[t][(None, var)] = KernelDensity(kernel="gaussian").fit(xx)
+        fncs[t][(None, v)] = KernelDensity(kernel="gaussian").fit(xx)
 
     # Fit remaining un-estimated edges
     for i, j in zip(*where(edge_fit_mat == 1)):
@@ -79,7 +79,7 @@ def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
         # Estimand
         yy = D_obs[y][:, t].reshape(-1, 1)
         #  Fit estimator
-        fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
+        fncs[t][(nodes[i],)] = fit_gp(x=xx, y=yy)
         # Update edge tracking matrix
         edge_fit_mat[i, j] -= 1
 
@@ -87,16 +87,16 @@ def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
     assert edge_fit_mat.sum() == 0
 
     # Finally, fit many-to-one function estimates (i.e. nodes with more than one parent) to account for multivariate intervention
-    many_to_one = nodes[where(emit_adj_mat.sum(axis=0) > 1)[0]]
+    many_to_one = where(emit_adj_mat.sum(axis=0) > 1)[0]
     if any(many_to_one):
-        for v in many_to_one:
+        for i, v in zip(many_to_one, nodes[many_to_one]):
             y, y_t = v.split("_")
             t = int(y_t)
-            pa_y = [vv.split("_")[0] for vv in G.predecessors(v) if vv.split("_")[1] == y_t]
+            pa_y = nodes[where(emit_adj_mat[:, i] == 1)]
             assert len(pa_y) > 1, (pa_y, y, many_to_one)
             xx = []
             for vv in pa_y:
-                x = D_obs[vv][:, t].reshape(-1, 1)
+                x = D_obs[vv.split("_")[0]][:, t].reshape(-1, 1)
                 xx.append(x)
             xx = hstack(xx)
             # Estimand

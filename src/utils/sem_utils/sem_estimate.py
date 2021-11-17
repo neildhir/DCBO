@@ -185,8 +185,7 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
         def __init__(self):
             self.G = G
             nodes = G.nodes()
-            # Number of nodes per time-slice
-            n_t = len(nodes) / G.T
+            n_t = len(nodes) / G.T  # Number of nodes per time-slice
             assert n_t.is_integer()
             self.n_t = int(n_t)
 
@@ -225,10 +224,11 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
             f = OrderedDict()
             # Assumes that the keys are causally ordered
             for v in list(self.G.nodes)[: self.n_t]:
+                vv = v.split("_")[0]
                 if self.G.in_degree[v] == 0:
-                    f[v] = self._make_marginal()
+                    f[vv] = self._make_marginal()
                 else:
-                    f[v] = self._make_emit_fnc(moment)
+                    f[vv] = self._make_emit_fnc(moment)
             return f
 
         def dynamic(self, moment: int) -> OrderedDict:
@@ -237,18 +237,19 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
             f = OrderedDict()
             # Variables are causally ordered
             for v in list(self.G.nodes)[self.n_t : 2 * self.n_t]:
+                vv = v.split("_")[0]
                 if self.G.in_degree[v] == 0:
                     # Single source node
-                    f[v] = self._make_marginal()
+                    f[vv] = self._make_marginal()
                 elif all(int(vv.split("_")[1]) + 1 == int(v.split("_")[1]) for vv in G.predecessors(v)):
                     # Depends only on incoming transition edge(s)
-                    f[v] = self._make_trans_fnc(moment)
+                    f[vv] = self._make_trans_fnc(moment)
                 elif all(vv.split("_")[1] == v.split("_")[1] for vv in G.predecessors(v)):
                     # Depends only on incoming emission edge(s) from this time-slice
-                    f[v] = self._make_emit_fnc(moment)
+                    f[vv] = self._make_emit_fnc(moment)
                 else:
                     # Depends incoming emission AND transition edges
-                    f[v] = self._make_emit_plus_trans_fnc(moment)
+                    f[vv] = self._make_emit_plus_trans_fnc(moment)
             return f
 
     return SEMHat
