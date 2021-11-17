@@ -134,23 +134,17 @@ class CBO(Root):
                     print("<<<\n\n")
 
                 if it == 0:
-                    # >>>OBSERVE<<<
 
                     self.trial_type[temporal_index].append("o")  # For 'o'bserve
 
                     if self.estimate_sem:
-                        # Check which current target we are dealing with
-                        _, target_temporal_index = target.split("_")
-                        assert int(target_temporal_index) == temporal_index
-                        sem_hat = self.make_sem_hat(
-                            summary_graph_node_parents=self.summary_graph_node_parents,
-                            independent_causes=self.independent_causes,
-                            emission_functions=self.sem_emit_fncs,
-                        )
+                        sem_hat = self.make_sem_hat(G=self.G, emission_fncs=self.sem_emit_fncs,)
                     else:
                         sem_hat = None
 
                     # Create mean functions and var functions given the observational data. This updates the prior.
+                    _, target_temporal_index = target.split("_")
+                    assert int(target_temporal_index) == temporal_index
                     self._update_sufficient_statistics(
                         target=target,
                         temporal_index=temporal_index,
@@ -361,10 +355,10 @@ class CBO(Root):
                     x = make_column_shape_2D(self.observational_samples[v][t])
                     xx.append(x)
                 xx = np.hstack(xx)
-                # Estimand
+                # Estimand (looks only at within time-slice targets)
                 y = [vv for vv in self.G.successors(pa) if vv.split("_")[1] == str(t)]
-                assert len(y), (y, pa, t)
-                yy = make_column_shape_2D(self.observational_samples[y.split("_")[0]][t])
+                assert len(y) == 1, (y, pa, t)
+                yy = make_column_shape_2D(self.observational_samples[y[0].split("_")[0]][t])
 
             assert len(xx.shape) == 2
             assert len(yy.shape) == 2
@@ -427,9 +421,7 @@ class CBO(Root):
             gamma = priors.Gamma(a=alpha, b=beta)  # See https://github.com/SheffieldML/GPy/issues/735
             model.kern.variance.set_prior(gamma)
 
-        # Store model
         model.likelihood.variance.fix()
-
         old_seed = np.random.get_state()
 
         np.random.seed(self.seed)

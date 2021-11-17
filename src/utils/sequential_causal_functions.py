@@ -1,8 +1,6 @@
 from collections import OrderedDict
-
+from networkx.classes.multidigraph import MultiDiGraph
 import numpy as np
-from numpy.random import randn
-from scipy.spatial import ConvexHull
 
 
 def sequential_sample_from_model(
@@ -84,6 +82,115 @@ def sequential_sample_from_model(
                     # TODO: evaluate input params in this loop and then pass as blind arguments
                     sample[var][temporal_idx] = function(epsilon[var][temporal_idx], temporal_idx, sample)
                 # print("\n sample inside sampling functin:", var, temporal_idx, sample)
+
+    return sample
+
+
+def sequential_sample_from_model_hat_v2(
+    static_sem: OrderedDict,
+    dynamic_sem: OrderedDict,
+    timesteps: int,
+    G: MultiDiGraph,
+    initial_values: dict = None,
+    interventions: dict = None,
+) -> OrderedDict:
+    """
+    Function to sequentially sample a dynamic Bayesian network using ESTIMATED SEMs. Currently function approximations are done using Gaussian processes.
+
+    Parameters
+    ----------
+    static_sem : OrderedDict
+        SEMs used at t=0
+    dynamic_sem : OrderedDict
+        SEMs used at t>0
+    timesteps : int
+        Total number of time-steps up until now (i.e. we do not sample the DAG beyond the current time-step)
+    G : MultiDiGraph
+        Causal DAG
+    initial_values : dict, optional
+        Initial values of nodes at t=0, by default None
+    interventions : dict, optional
+        Blanket which contains the interventions implemented thus far, by default None
+
+    Returns
+    -------
+    OrderedDict
+        A sample from the CBN given previously implemented interventions as well as the current one
+
+    Raises
+    ------
+    ValueError
+        If internventions and initial values are passed at t=0 -- they are equivalent so both cannot be passed.
+    ValueError
+        [description]
+    """
+
+    # Notice that we call it 'sample' in singular since we only receive one sample of the whole graph
+    sample = OrderedDict([(k, np.zeros(timesteps)) for k in static_sem.keys()])
+
+    if initial_values:
+        assert sample.keys() == initial_values.keys()
+
+    for t in range(timesteps):
+        if t == 0 or dynamic_sem is None:
+            for var, function in static_sem.items():
+                time = str(t)
+                node = var + "_" + time
+
+                # Check that interventions and initial values at t=0 are not both provided
+                if interventions and initial_values:
+                    if interventions[var][t] is not None and initial_values[var] is not None:
+                        raise ValueError(
+                            "You cannot provided an initial value "
+                            "and an intervention for the same location "
+                            "(var,time) in the graph."
+                        )
+
+                # If interventions exist they take precedence
+                if interventions and interventions[var][t]:
+                    sample[var][t] = interventions[var][t]
+
+                # If initial values are passed then we use these, if no interventions
+                elif initial_values:
+                    sample[var][t] = initial_values[var]
+
+                # If neither interventions nor initial values are provided; sample the model
+                else:
+                    pa = G.predecessors(node)
+                    if pa:
+                        if t == 0:
+                            sample[var][t] = function(t, pa, sample)
+                        else:
+                            emit_vars = (*[v for v in pa if v.split("_")[1] == time],)
+                            if emit_vars:
+                                sample[var][t] = function(t, emit_vars, sample)
+                            else:
+                                #  Sample source node marginal
+                                sample[var][t] = function(t, (None, var), None)
+                    else:
+                        #  Sample source node marginal
+                        sample[var][t] = function(t, (None, var), None)
+
+        else:
+            assert dynamic_sem is not None
+            # Dynamically propagate the samples through the graph using estimated SEMs. If we have found an optimal interventional target response from t-1, it has been included in the intervention dictionary at the correct index.
+
+            for var, function in dynamic_sem.items():
+                time = str(t)
+                node = var + "_" + time
+
+                #  XXX: note the weird syntax used here; it converts a list to a tuple (e.g. Y_0 --> Y_1)
+                transfer_vars = (*[v for v in node_parents[node] if v.split("_")[1] != time],)
+                # Get conditioning variables from conditional distribution (input-variables at this time-step only)
+                emit_vars = (*[v for v in node_parents[node] if v.split("_")[1] == time],)
+
+                #  Sample
+                if interventions and interventions[var][t]:
+                    sample[var][t] = interventions[var][t]
+                elif node_parents[node]:
+                    sample[var][t] = function(t, transfer_vars, emit_vars, sample)
+                else:
+                    sample[var][t] = function()
 
     return sample
 

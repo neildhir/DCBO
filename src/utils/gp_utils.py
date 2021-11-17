@@ -1,5 +1,8 @@
 from copy import deepcopy
+from typing import OrderedDict
+from networkx.classes.multidigraph import MultiDiGraph
 import numpy as np
+from typing import Tuple
 from GPy.core.mapping import Mapping
 from GPy.core.parameterization import priors
 from GPy.kern import RBF
@@ -12,14 +15,45 @@ def update_sufficient_statistics_hat(
     temporal_index: int,
     target_variable: str,
     exploration_set: tuple,
-    sem_hat,
-    node_parents,
+    sem_hat: OrderedDict,
+    G: MultiDiGraph,
     dynamic: bool,
     assigned_blanket: dict,
     mean_dict_store: dict,
     var_dict_store: dict,
     seed: int = 1,
-):
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Updates the mean and variance functions (priors) on our causal effects given the current exploration set.
+
+    Parameters
+    ----------
+    temporal_index : int
+        The current time index in the causal Bayesian network.
+    target_variable : str
+        The current target variable e.g Y_1
+    exploration_set : tuple
+        The current exploration set
+    sem_hat : OrderedDict
+        Contains our estimated SEMs
+    G : MultiDiGraph
+        Causal DAG
+    dynamic : bool
+        Tells the method to use horizontal information or not
+    assigned_blanket : dict
+        The assigned blanket thus far (i.e. up until the temporal index)
+    mean_dict_store : dict
+        Stores the updated mean function for this time index and exploration set
+    var_dict_store : dict
+        Stores the updated variance function for this time index and exploration set
+    seed : int, optional
+        The random seet, by default 1
+
+    Returns
+    -------
+    Tuple
+        Returns the updated mean and variance function
+    """
 
     if dynamic:
         # This relies on the correct blanket being passed from outside this function.
@@ -28,9 +62,9 @@ def update_sufficient_statistics_hat(
         dynamic_sem_var = sem_hat().dynamic(moment=1)
     else:
         # static: no backward dependency on past targets or interventions
-        intervention_blanket = deepcopy(assigned_blanket)
-        # This is empty if passed correctly.
-        # This relies on the correct blanket being passed from outside this function.
+        intervention_blanket = deepcopy(
+            assigned_blanket
+        )  # This is empty if passed correctly. This relies on the correct blanket being passed from outside this function.
         assert [all(intervention_blanket[key] is None for key in intervention_blanket.keys())]
         dynamic_sem_mean = None  # CBO does not have horizontal information hence gets static model every time
         dynamic_sem_var = None  # CBO does not have horizontal information hence gets static model every time
@@ -39,35 +73,35 @@ def update_sufficient_statistics_hat(
     kwargs1 = {
         "static_sem": sem_hat().static(moment=0),  # Get the mean
         "dynamic_sem": dynamic_sem_mean,
-        "node_parents": node_parents,
+        "G": G,
         "timesteps": temporal_index + 1,
     }
     #  Variance vars
     kwargs2 = {
         "static_sem": sem_hat().static(moment=1),  # Gets the variance
         "dynamic_sem": dynamic_sem_var,
-        "node_parents": node_parents,
+        "G": G,
         "timesteps": temporal_index + 1,
     }
 
     def mean_function_internal(x_vals, mean_dict_store):
-        out = []
+        samples = []
         for x in x_vals:
             # Check if it is already computed
             if str(x) in mean_dict_store[temporal_index][exploration_set].keys():
-                out.append(mean_dict_store[temporal_index][exploration_set][str(x)])
+                samples.append(mean_dict_store[temporal_index][exploration_set][str(x)])
             else:
                 # Otherwise compute it and store it
                 for intervention_variable, xx in zip(exploration_set, x):
                     intervention_blanket[intervention_variable][temporal_index] = xx
 
-                # TODO: parallelise all sampling functions, this is much too slow [GPyTorch]
+                # TODO: parallelise all sampling functions, this is much too slow [GPyTorch] -- see https://docs.gpytorch.ai/en/v1.5.0/examples/08_Advanced_Usage/Simple_Batch_Mode_GP_Regression.html#Setting-up-the-model
                 sample = sequential_sample_from_model_hat(interventions=intervention_blanket, **kwargs1, seed=seed)
-                out.append(sample[target_variable][temporal_index])
+                samples.append(sample[target_variable][temporal_index])
 
                 mean_dict_store[temporal_index][exploration_set][str(x)] = sample[target_variable][temporal_index]
 
-        return np.vstack(out)
+        return np.vstack(samples)
 
     def mean_function(x_vals):
         return mean_function_internal(x_vals, mean_dict_store)

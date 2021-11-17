@@ -30,13 +30,13 @@ def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
         Dictionary containing the estimated SEM functions
     """
 
-    # Emission adjacency matrix
+    # Emission adjacency matrix (doesn't contain entries for transition edges)
     emit_adj_mat, _ = get_emit_and_trans_adjacency_mats(G)
     #  Binary matrix which keeps track of which edges have been fitted
     edge_fit_mat = deepcopy(emit_adj_mat)
     T = G.T
     nodes = array(G.nodes())
-    fncs = {t: {} for t in range(T)}
+    fncs = {t: {} for t in range(T)}  # SEM functions
 
     # Each node in this list is a parent to more than one child node i.e. Y <-- X --> Z
     fork_idx = where(emit_adj_mat.sum(axis=1) > 1)[0]
@@ -46,20 +46,20 @@ def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
         for i, v in zip(fork_idx, fork_nodes):
             #  Get children / independents
             coords = where(emit_adj_mat[i, :] == 1)[0]
-            ch = nodes[coords].tolist()
+            ch = nodes[coords].tolist()  # Gets variables names
             var, t = v.split("_")
             t = int(t)
-            xx = D_obs[var][:, t].reshape(-1, 1)
+            xx = D_obs[var][:, t].reshape(-1, 1)  #  Independent regressor
             for j, y in enumerate(ch):
                 # Estimand
                 var_y, _ = y.split("_")
                 yy = D_obs[var_y][:, t].reshape(-1, 1)
                 # Fit estimator
                 fncs[t][(var, j, var_y)] = fit_gp(x=xx, y=yy)
-                # Update edge tracking matrix
+                # Update edge tracking matrix (removes entry (i,j) if it has been fitted)
                 edge_fit_mat[i, coords[j]] -= 1
 
-    # Assign estimators to source nodes
+    # Assign estimators to source nodes (these don't exist in edge_fit_mat)
     for v in [vv for vv in dict(G.in_degree) if G.in_degree(vv) == 0]:
         var, t = v.split("_")
         t = int(t)
@@ -68,7 +68,7 @@ def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
         # Fit estimator
         fncs[t][(None, var)] = KernelDensity(kernel="gaussian").fit(xx)
 
-    # Check remaining un-estimated edges
+    # Fit remaining un-estimated edges
     for i, j in zip(*where(edge_fit_mat == 1)):
         pa_y, t_pa = nodes[i].split("_")
         y, t_y = nodes[j].split("_")
@@ -85,6 +85,24 @@ def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
 
     #  The edge-tracking matrix should be zero at the end.
     assert edge_fit_mat.sum() == 0
+
+    # Finally, fit many-to-one function estimates (i.e. nodes with more than one parent) to account for multivariate intervention
+    many_to_one = nodes[where(emit_adj_mat.sum(axis=0) > 1)[0]]
+    if any(many_to_one):
+        for v in many_to_one:
+            y, y_t = v.split("_")
+            t = int(y_t)
+            pa_y = [vv.split("_")[0] for vv in G.predecessors(v) if vv.split("_")[1] == y_t]
+            assert len(pa_y) > 1, (pa_y, y, many_to_one)
+            xx = []
+            for vv in pa_y:
+                x = D_obs[vv][:, t].reshape(-1, 1)
+                xx.append(x)
+            xx = hstack(xx)
+            # Estimand
+            yy = D_obs[y][:, t].reshape(-1, 1)
+            #  Fit estimator
+            fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
 
     return fncs
 

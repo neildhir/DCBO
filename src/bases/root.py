@@ -97,7 +97,6 @@ class Root:
         # Extracted DAG properties
         # self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
 
-
         #   ------------- GRAPH STUFF to be replaced by a non-symetric adjacency matrix
 
         # Check that we are either minimising or maximising the objective function
@@ -368,7 +367,7 @@ class Root:
                     plt.show()
 
     def _update_sufficient_statistics(
-        self, target: str, temporal_index: int, dynamic: bool, assigned_blanket: dict, updated_sem=None
+        self, target: str, temporal_index: int, dynamic: bool, assigned_blanket: dict, updated_sem
     ) -> None:
         """
         Method to update mean and variance functions of the causal prior (GP).
@@ -380,10 +379,10 @@ class Root:
         temporal_index : int
             The temporal index currently being explored by the algorithm.
         dynamic : bool
-            Tells the algorithms whether or not to use horizontal information (i.e. transition information between temporal slices).
+            Tells the algorithm whether or not to use horizontal information (i.e. transition information between temporal slices).
         assigned_blanket : dict
             The assigned values thus far, per time-slice, per node in the CGM.
-        updated_sem : [type], optional
+        updated_sem : OrderedDict
             Structural equations model.
         """
 
@@ -392,17 +391,16 @@ class Root:
         assert int(target_temporal_index) == temporal_index
 
         for es in self.exploration_sets:
-            #  Use estimates of sem
             if self.estimate_sem:
                 (
                     self.mean_function[temporal_index][es],
                     self.variance_function[temporal_index][es],
                 ) = update_sufficient_statistics_hat(
-                    temporal_index,
-                    target_variable,
-                    es,
-                    updated_sem,
-                    self.node_parents,
+                    temporal_index=temporal_index,
+                    target_variable=target_variable,
+                    exploration_set=es,
+                    sem_hat=updated_sem,
+                    G=self.G,
                     dynamic=dynamic,
                     assigned_blanket=assigned_blanket,
                     mean_dict_store=self.mean_dict_store,
@@ -410,19 +408,19 @@ class Root:
                 )
             # Use true sem
             else:
-                # At the first time-slice we do not have any previous fixed interventions to consider.
-                (
-                    self.mean_function[temporal_index][es],
-                    self.variance_function[temporal_index][es],
-                ) = update_sufficient_statistics(
-                    temporal_index,
-                    es,
-                    self.node_children,
-                    self.true_initial_sem,
-                    self.true_sem,
-                    dynamic=dynamic,
-                    assigned_blanket=assigned_blanket,  # At t=0 this is a dummy variable as it has not been assigned yet.
-                )
+                raise NotImplementedError("This function has to be updated.")
+                # (
+                #     self.mean_function[temporal_index][es],
+                #     self.variance_function[temporal_index][es],
+                # ) = update_sufficient_statistics(
+                #     temporal_index,
+                #     es,
+                #     self.node_children,
+                #     self.true_initial_sem,
+                #     self.true_sem,
+                #     dynamic=dynamic,
+                #     assigned_blanket=assigned_blanket,  # At t=0 this is a dummy variable as it has not been assigned yet.
+                # )
 
     def _update_observational_data(self, temporal_index):
         if temporal_index > 0:

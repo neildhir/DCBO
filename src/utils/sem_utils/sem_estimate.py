@@ -186,7 +186,7 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
             self.G = G
             nodes = G.nodes()
             # Number of nodes per time-slice
-            n_t = len(nodes) / G.T  # TODO: add this method to G before passing it in here
+            n_t = len(nodes) / G.T
             assert n_t.is_integer()
             self.n_t = int(n_t)
 
@@ -241,13 +241,13 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
                     # Single source node
                     f[v] = self._make_marginal()
                 elif all(int(vv.split("_")[1]) + 1 == int(v.split("_")[1]) for vv in G.predecessors(v)):
-                    #  Depends only on incoming transition edge(s)
+                    # Depends only on incoming transition edge(s)
                     f[v] = self._make_trans_fnc(moment)
                 elif all(vv.split("_")[1] == v.split("_")[1] for vv in G.predecessors(v)):
-                    #  Depends only on incoming emission edge(s) from this time-slice
+                    # Depends only on incoming emission edge(s) from this time-slice
                     f[v] = self._make_emit_fnc(moment)
                 else:
-                    #  Has incoming emission and transition edges
+                    # Depends incoming emission AND transition edges
                     f[v] = self._make_emit_plus_trans_fnc(moment)
             return f
 
