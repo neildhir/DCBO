@@ -192,7 +192,7 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
         @staticmethod
         def _make_marginal() -> Callable:
             #  Assigns the KDE for the marginal
-            return lambda t, emit_input_vars, _: emission_fncs[t][emit_input_vars].sample()
+            return lambda t, margin_id: emission_fncs[t][margin_id].sample()
 
         @staticmethod
         def _make_emit_fnc(moment: int) -> Callable:

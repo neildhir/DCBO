@@ -13,7 +13,6 @@ from src.bases.root import Root
 from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.gp_utils import fit_gp
 from src.utils.sem_utils.emissions import fit_sem_emit_fncs
 from src.utils.utilities import (
     assign_blanket,
@@ -156,7 +155,6 @@ class CBO(Root):
                     self._update_opt_params(it, temporal_index, best_es)
 
                 else:
-                    # >>>INTERVENE<<<
 
                     # Presently find the optimal value of Y_t
                     current_best_global_target = eval(self.task)(self.outcome_values[temporal_index])
@@ -224,15 +222,14 @@ class CBO(Root):
                     self._update_bo_model(temporal_index, best_es)
 
                     if self.debug_mode:
-                        print("########################### results of optimization ##################")
+                        print(">>> Results of optimization")
                         self._plot_surrogate_model(temporal_index)
-
-                    if self.debug_mode:
                         print(
                             "### Optimized model: ###", best_es, self.bo_model[temporal_index][best_es].model,
                         )
 
             # Post optimisation assignments (post this time-index that is)
+
             # Index of the best value of the objective function
             best_objective_fnc_value_idx = (
                 self.outcome_values[temporal_index].index(eval(self.task)(self.outcome_values[temporal_index])) - 1
@@ -360,11 +357,10 @@ class CBO(Root):
                 # Estimand (looks only at within time-slice targets)
                 ys = set.intersection(*map(set, [self.G.successors(v) for v in pa]))
                 if len(ys) == 1:
-                    pass
+                    for y in ys:
+                        yy = make_column_shape_2D(self.observational_samples[y.split("_")[0]][t])
                 else:
                     raise NotImplementedError("Have not covered DAGs with this type of connectivity.", (pa, ys))
-                for y in ys:
-                    yy = make_column_shape_2D(self.observational_samples[y.split("_")[0]][t])
 
             assert len(xx.shape) == 2
             assert len(yy.shape) == 2

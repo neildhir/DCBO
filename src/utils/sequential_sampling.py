@@ -1,5 +1,5 @@
 from collections import OrderedDict
-from networkx.classes.multidigraph import MultiDiGraph
+from typing import Callable
 import numpy as np
 
 
@@ -90,7 +90,7 @@ def sequential_sample_from_model_hat_v2(
     static_sem: OrderedDict,
     dynamic_sem: OrderedDict,
     timesteps: int,
-    G: MultiDiGraph,
+    node_parents: Callable,
     initial_values: dict = None,
     interventions: dict = None,
 ) -> OrderedDict:
@@ -100,13 +100,13 @@ def sequential_sample_from_model_hat_v2(
     Parameters
     ----------
     static_sem : OrderedDict
-        SEMs used at t=0
+        SEMs used at t=0 and used for CBO since CBO does not have access to the dynamic model
     dynamic_sem : OrderedDict
         SEMs used at t>0
     timesteps : int
         Total number of time-steps up until now (i.e. we do not sample the DAG beyond the current time-step)
-    G : MultiDiGraph
-        Causal DAG
+    node_parents : Callable
+        Function with returns parents of the passed argument at the given time-slice
     initial_values : dict, optional
         Initial values of nodes at t=0, by default None
     interventions : dict, optional
@@ -121,8 +121,6 @@ def sequential_sample_from_model_hat_v2(
     ------
     ValueError
         If internventions and initial values are passed at t=0 -- they are equivalent so both cannot be passed.
-    ValueError
-        [description]
     """
 
     # Notice that we call it 'sample' in singular since we only receive one sample of the whole graph
@@ -138,58 +136,34 @@ def sequential_sample_from_model_hat_v2(
                 if interventions and initial_values:
                     if interventions[var][t] is not None and initial_values[var] is not None:
                         raise ValueError(
-                            "You cannot provided an initial value "
-                            "and an intervention for the same location "
-                            "(var,time) in the graph."
+                            "You cannot provided an initial value and an intervention for the same location(var,time) in the graph."
                         )
-
                 # If interventions exist they take precedence
                 if interventions and interventions[var][t]:
                     sample[var][t] = interventions[var][t]
-
                 # If initial values are passed then we use these, if no interventions
                 elif initial_values:
                     sample[var][t] = initial_values[var]
-
                 # If neither interventions nor initial values are provided; sample the model
                 else:
-                    time = str(t)
-                    node = var + "_" + time
-                    pa = G.predecessors(node)
-                    if pa:
-                        if t == 0:
-                            sample[var][t] = function(t, pa, sample)
-                        else:
-                            emit_vars = (*[v for v in pa if v.split("_")[1] == time],)
-                            if emit_vars:
-                                sample[var][t] = function(t, emit_vars, sample)
-                            else:
-                                #  Sample source node marginal
-                                sample[var][t] = function(t, (None, var), None)
+                    node = var + "_" + str(t)
+                    if node_parents(node, t):
+                        sample[var][t] = function(t, node_parents(node, t), sample)
                     else:
-                        #  Sample source node marginal
-                        sample[var][t] = function(t, (None, var), None)
-
+                        # Sample source node marginal
+                        sample[var][t] = function(t, (None, node))
         else:
             assert dynamic_sem is not None
-            # Dynamically propagate the samples through the graph using estimated SEMs. If we have found an optimal interventional target response from t-1, it has been included in the intervention dictionary at the correct index.
-
             for var, function in dynamic_sem.items():
-                time = str(t)
-                node = var + "_" + time
-
-                #  XXX: note the weird syntax used here; it converts a list to a tuple (e.g. Y_0 --> Y_1)
-                transfer_vars = (*[v for v in node_parents[node] if v.split("_")[1] != time],)
-                # Get conditioning variables from conditional distribution (input-variables at this time-step only)
-                emit_vars = (*[v for v in node_parents[node] if v.split("_")[1] == time],)
-
-                #  Sample
+                node = var + "_" + str(t)  # E.g. X_1
                 if interventions and interventions[var][t]:
                     sample[var][t] = interventions[var][t]
-                elif node_parents[node]:
-                    sample[var][t] = function(t, transfer_vars, emit_vars, sample)
+                elif node_parents(node):
+                    # function args: time index, parents which are transfer vars, parents which are emission vars and the sample
+                    sample[var][t] = function(t, node_parents(node, t - 1), node_parents(node, t), sample)
                 else:
-                    sample[var][t] = function()
+                    # Sample source node marginal
+                    sample[var][t] = function(t, (None, node))
 
     return sample
 

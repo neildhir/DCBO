@@ -8,10 +8,8 @@ from networkx.classes.multidigraph import MultiDiGraph
 from numpy.core.multiarray import ndarray
 from numpy.core.numeric import nan
 from src.bayes_opt.cost_functions import define_costs
-from src.utils.dag_utils.graph_functions import get_independent_causes, get_summary_graph_node_parents
-from src.utils.gp_utils import update_sufficient_statistics, update_sufficient_statistics_hat
-from src.utils.sem_utils.emissions import fit_sem_emit_fncs, fit_sem_emit_fncs_old, get_emissions_input_output_pairs
-from src.utils.sequential_causal_functions import sequentially_sample_model
+from src.utils.gp_utils import update_sufficient_statistics_hat
+from src.utils.sequential_sampling import sequentially_sample_model
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
@@ -98,6 +96,11 @@ class Root:
         # self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
 
         #   ------------- GRAPH STUFF to be replaced by a non-symetric adjacency matrix
+
+        #  Parents of all nodes
+        self.node_pars = {node: None for node in G.nodes}
+        for node in G.nodes:
+            self.node_pars[node] = tuple(G.predecessors(node))
 
         # Check that we are either minimising or maximising the objective function
         assert task in ["min", "max"], task
@@ -228,6 +231,13 @@ class Root:
         self.estimate_sem = estimate_sem
         if self.estimate_sem:
             self.assigned_blanket_hat = deepcopy(self.optimal_blanket)
+
+    def node_parents(self, node: str, temporal_index: int = None) -> tuple:
+        #  Returns the parents of this node with optional filtering on the time-index.
+        if temporal_index:
+            return (*[v for v in self.node_pars[node] if v.split("_")[1] == str(temporal_index)],)
+        else:
+            return tuple(self.node_pars[node])
 
     def _plot_surrogate_model(self, temporal_index):
         # Plot model
@@ -383,7 +393,7 @@ class Root:
         assigned_blanket : dict
             The assigned values thus far, per time-slice, per node in the CGM.
         updated_sem : OrderedDict
-            Structural equations model.
+            Structural equation model.
         """
 
         # Check which current target we are dealing with, and in consequence where we are in time
@@ -400,7 +410,7 @@ class Root:
                     target_variable=target_variable,
                     exploration_set=es,
                     sem_hat=updated_sem,
-                    G=self.G,
+                    node_parents=self.node_parents,
                     dynamic=dynamic,
                     assigned_blanket=assigned_blanket,
                     mean_dict_store=self.mean_dict_store,

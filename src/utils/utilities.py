@@ -4,7 +4,7 @@ from typing import Tuple
 import numpy as np
 from emukit.core import ContinuousParameter, ParameterSpace
 from numpy.core import hstack, vstack
-from .sequential_causal_functions import sequential_sample_from_model
+from .sequential_sampling import sequential_sample_from_model
 import matplotlib.pyplot as plt
 
 

@@ -1,14 +1,13 @@
 from copy import deepcopy
 from typing import OrderedDict
-from networkx.classes.multidigraph import MultiDiGraph
 import numpy as np
-from typing import Tuple
+from typing import Tuple, Callable
 from GPy.core.mapping import Mapping
 from GPy.core.parameterization import priors
 from GPy.kern import RBF
 from GPy.models.gp_regression import GPRegression
 from ..bayes_opt.causal_kernels import CausalRBF
-from .sequential_causal_functions import sequential_sample_from_model_hat, sequential_sample_from_model
+from .sequential_sampling import sequential_sample_from_model_hat, sequential_sample_from_model
 
 
 def update_sufficient_statistics_hat(
@@ -16,7 +15,7 @@ def update_sufficient_statistics_hat(
     target_variable: str,
     exploration_set: tuple,
     sem_hat: OrderedDict,
-    G: MultiDiGraph,
+    node_parents: Callable,
     dynamic: bool,
     assigned_blanket: dict,
     mean_dict_store: dict,
@@ -36,8 +35,8 @@ def update_sufficient_statistics_hat(
         The current exploration set
     sem_hat : OrderedDict
         Contains our estimated SEMs
-    G : MultiDiGraph
-        Causal DAG
+    node_parents : Callable
+        Function with returns parents of the passed argument at the given time-slice
     dynamic : bool
         Tells the method to use horizontal information or not
     assigned_blanket : dict
@@ -73,34 +72,31 @@ def update_sufficient_statistics_hat(
     kwargs1 = {
         "static_sem": sem_hat().static(moment=0),  # Get the mean
         "dynamic_sem": dynamic_sem_mean,
-        "G": G,
+        "node_parents": node_parents,
         "timesteps": temporal_index + 1,
     }
     #  Variance vars
     kwargs2 = {
         "static_sem": sem_hat().static(moment=1),  # Gets the variance
         "dynamic_sem": dynamic_sem_var,
-        "G": G,
+        "node_parents": node_parents,
         "timesteps": temporal_index + 1,
     }
 
     def mean_function_internal(x_vals, mean_dict_store):
         samples = []
         for x in x_vals:
-            # Check if it is already computed
+            # Check if it has already been computed
             if str(x) in mean_dict_store[temporal_index][exploration_set].keys():
                 samples.append(mean_dict_store[temporal_index][exploration_set][str(x)])
             else:
                 # Otherwise compute it and store it
                 for intervention_variable, xx in zip(exploration_set, x):
                     intervention_blanket[intervention_variable][temporal_index] = xx
-
                 # TODO: parallelise all sampling functions, this is much too slow [GPyTorch] -- see https://docs.gpytorch.ai/en/v1.5.0/examples/08_Advanced_Usage/Simple_Batch_Mode_GP_Regression.html#Setting-up-the-model
                 sample = sequential_sample_from_model_hat(interventions=intervention_blanket, **kwargs1, seed=seed)
                 samples.append(sample[target_variable][temporal_index])
-
                 mean_dict_store[temporal_index][exploration_set][str(x)] = sample[target_variable][temporal_index]
-
         return np.vstack(samples)
 
     def mean_function(x_vals):
@@ -116,13 +112,10 @@ def update_sufficient_statistics_hat(
                 # Otherwise compute it and store it
                 for intervention_variable, xx in zip(exploration_set, x):
                     intervention_blanket[intervention_variable][temporal_index] = xx
-
                 # TODO: parallelise all sampling functions, this is much too slow
                 sample = sequential_sample_from_model_hat(interventions=intervention_blanket, **kwargs2, seed=seed)
                 out.append(sample[target_variable][temporal_index])
-
                 var_dict_store[temporal_index][exploration_set][str(x)] = sample[target_variable][temporal_index]
-
         return np.vstack(out)
 
     def variance_function(x_vals):
