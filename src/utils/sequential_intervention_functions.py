@@ -1,7 +1,7 @@
 from copy import deepcopy
 import numpy as np
 from .intervention_assignments import assign_initial_intervention_level, assign_intervention_level
-from .sequential_causal_functions import sequential_sample_from_model
+from .sequential_sampling import sequential_sample_from_true_SEM
 
 
 def create_n_dimensional_intervention_grid(limits: list, size_intervention_grid: int = 100):
@@ -92,7 +92,7 @@ def evaluate_target_function(
 
         static_noise_model = {k: np.zeros(T) for k in list(all_vars)}
 
-        interventional_samples = sequential_sample_from_model(
+        interventional_samples = sequential_sample_from_true_SEM(
             static_sem=initial_structural_equation_model,
             dynamic_sem=structural_equation_model,
             timesteps=T,

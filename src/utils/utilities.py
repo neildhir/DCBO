@@ -1,10 +1,11 @@
 from copy import deepcopy
 from itertools import chain, combinations
 from typing import Tuple
+from networkx.classes.multidigraph import MultiDiGraph
 import numpy as np
 from emukit.core import ContinuousParameter, ParameterSpace
 from numpy.core import hstack, vstack
-from .sequential_sampling import sequential_sample_from_model
+from .sequential_sampling import sequential_sample_from_true_SEM
 import matplotlib.pyplot as plt
 
 
@@ -290,19 +291,19 @@ def assign_blanket_hat(
 
 
 def assign_blanket(
-    initial_sem: dict,  # OBS: true SEM
-    sem: dict,  #  OBS: true SEM
+    static_sem: dict,  # OBS: true SEM
+    dynamic_sem: dict,  #  OBS: true SEM
     blanket: dict,
     exploration_set: list,
-    intervention_level,
+    intervention_level: np.array,
     target: str,
-    target_value,
-    node_children: dict,
-):
+    target_value: float,
+    G: MultiDiGraph,
+) -> None:
 
     # Split current target
-    target_canonical_variable, temporal_index = target.split("_")
-    temporal_index = int(temporal_index)
+    target_var, temporal_index = target.split("_")
+    t = int(temporal_index)
     assert len(exploration_set) == intervention_level.shape[1], (
         exploration_set,
         intervention_level,
@@ -310,28 +311,29 @@ def assign_blanket(
     assert intervention_level is not None
 
     #  Assign target value
-    blanket[target_canonical_variable][temporal_index] = float(target_value)
+    blanket[target_var][t] = float(target_value)
 
     if len(exploration_set) == 1:
         # Intervention only happening on _one_ variable, assign it
         intervention_variable = exploration_set[0]
         # Intervention only happening on _one_ variable, assign it
-        blanket[intervention_variable][temporal_index] = float(intervention_level)
-        # The target and intervention value have already assigned
-        # so we check to see if anything else is missing in this time-slice
-        intervention_node = intervention_variable + "_" + str(temporal_index)
+        blanket[intervention_variable][t] = float(intervention_level)
+        # The target and intervention value have already assigned so we check to see if anything else is missing in this time-slice
+        intervention_node = intervention_variable + "_" + str(t)
         children = [
-            v.split("_")[0] for v in node_children[intervention_node] if v.split("_")[0] != target_canonical_variable
+            v.split("_")[0]
+            for v in G.successors(intervention_node)
+            if v.split("_")[0] != target_var and v.split("_")[1] == temporal_index
         ]
-        if len(children) != 0:
+        if children:
             for child in children:
-                if blanket[child][temporal_index] is None:  # Only valid when t > 0
+                if blanket[child][t] is None:  # Only valid when t > 0
                     # Value is None so we sample a value for this node
-                    sample = sequential_sample_from_model(initial_sem, sem, temporal_index + 1, interventions=blanket)
-                    blanket[child][temporal_index] = sample[child][temporal_index]
+                    sample = sequential_sample_from_true_SEM(static_sem, dynamic_sem, t + 1, interventions=blanket)
+                    blanket[child][t] = sample[child][t]
     else:
         for i, intervention_variable in enumerate(exploration_set):
-            blanket[intervention_variable][temporal_index] = float(intervention_level[:, i])
+            blanket[intervention_variable][t] = float(intervention_level[:, i])
 
 
 def check_blanket(blanket, base_target_variable, temporal_index, manipulative_variables):
@@ -402,7 +404,7 @@ def calculate_best_intervention_and_effect(
         for xx in interventional_grids[es]:
             for intervention_variable, x in zip(es, xx):
                 this_blanket[intervention_variable][time] = x
-            out = sequential_sample_from_model(
+            out = sequential_sample_from_true_SEM(
                 static_sem=static_sem,
                 dynamic_sem=dynamic_sem,
                 timesteps=time + 1,

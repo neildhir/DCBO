@@ -3,96 +3,62 @@ from typing import Callable
 import numpy as np
 
 
-def sequential_sample_from_model(
-    static_sem,
-    dynamic_sem,
+def sequential_sample_from_true_SEM(
+    static_sem: OrderedDict,
+    dynamic_sem: OrderedDict,
     timesteps: int,
     initial_values: dict = None,
     interventions: dict = None,
     epsilon=None,
     seed=None,
-):
-    """Function to sequentially sample a dynamic Bayesian network.
-
-    Parameters
-    ----------
-    initial_values : dict
-        Start values for SEM
-    interventions : dict
-        Dictionary of interventions (variables on keys and time-steps on horizontal array dim)
-
-    Returns
-    -------
-    dict
-        Sequential sample from DBN.
-    """
-
-    # A specific noise-model has not been provided so we use standard Gaussian noise
+) -> OrderedDict:
     if seed is not None:
         np.random.seed(seed)
-
+    # A specific noise-model has not been provided so we use standard Gaussian noise
     if not epsilon:
         epsilon = {k: np.random.randn(timesteps) for k in static_sem.keys()}
     assert isinstance(epsilon, dict)
-
     # Notice that we call it 'sample' in singular since we only want one sample of the whole graph
     sample = OrderedDict([(k, np.zeros(timesteps)) for k in static_sem.keys()])
-
     if initial_values:
         assert sample.keys() == initial_values.keys()
 
-    for temporal_idx in range(timesteps):
-
-        if temporal_idx == 0:
-
+    for t in range(timesteps):
+        if t == 0 or dynamic_sem is None:
             for var, function in static_sem.items():
                 # Check that interventions and initial values at t=0 are not both provided
                 if interventions and initial_values:
-                    if interventions[var][temporal_idx] is not None and initial_values[var] is not None:
+                    if interventions[var][t] is not None and initial_values[var] is not None:
                         raise ValueError(
-                            "You cannot provided an initial value "
-                            "and an intervention for the same location "
-                            "(var,time) in the graph."
+                            "You cannot provided an initial value and an intervention for the same location(var,time) in the graph."
                         )
-
                 # If interventions exist they take precedence
-                if interventions is not None and interventions[var][temporal_idx] is not None:
-                    sample[var][temporal_idx] = interventions[var][temporal_idx]
-
+                if interventions is not None and interventions[var][t] is not None:
+                    sample[var][t] = interventions[var][t]
                 # If initial values are passed then we use these, if no interventions
                 elif initial_values:
-                    sample[var][temporal_idx] = initial_values[var]
-
-                # If neither interventions nor initial values are provided
-                # sample the model with provided epsilon, if exists
+                    sample[var][t] = initial_values[var]
+                # If neither interventions nor initial values are provided sample the model with provided epsilon, if exists
                 else:
-                    # XXX: this SEM does _not_ have backwards temporal dependency
-                    sample[var][temporal_idx] = function(epsilon[var][temporal_idx], temporal_idx, sample)
-
+                    sample[var][t] = function(epsilon[var][t], t, sample)
         else:
-            # Dynamically propagate the samples through the graph using
-            # the static (with noise) structural equation models
-            # If we have found an optimal interventional target response from t-1,
-            # it has been included in the intervention dictionary at the correct index.
             for var, function in dynamic_sem.items():
-                if interventions is not None and interventions[var][temporal_idx] is not None:
-                    sample[var][temporal_idx] = interventions[var][temporal_idx]
+                if interventions is not None and interventions[var][t] is not None:
+                    sample[var][t] = interventions[var][t]
                 else:
-                    # TODO: fix this construction, it is very slow to pass the whole sample.
-                    # TODO: evaluate input params in this loop and then pass as blind arguments
-                    sample[var][temporal_idx] = function(epsilon[var][temporal_idx], temporal_idx, sample)
-                # print("\n sample inside sampling functin:", var, temporal_idx, sample)
+                    sample[var][t] = function(epsilon[var][t], t, sample)
 
     return sample
 
 
-def sequential_sample_from_model_hat_v2(
+def sequential_sample_from_SEM_hat(
     static_sem: OrderedDict,
     dynamic_sem: OrderedDict,
     timesteps: int,
     node_parents: Callable,
     initial_values: dict = None,
     interventions: dict = None,
+    seed: int = None,
 ) -> OrderedDict:
     """
     Function to sequentially sample a dynamic Bayesian network using ESTIMATED SEMs. Currently function approximations are done using Gaussian processes.
@@ -122,10 +88,10 @@ def sequential_sample_from_model_hat_v2(
     ValueError
         If internventions and initial values are passed at t=0 -- they are equivalent so both cannot be passed.
     """
-
+    if seed:
+        np.random.seed(seed)
     # Notice that we call it 'sample' in singular since we only receive one sample of the whole graph
     sample = OrderedDict([(k, np.zeros(timesteps)) for k in static_sem.keys()])
-
     if initial_values:
         assert sample.keys() == initial_values.keys()
 
@@ -168,14 +134,13 @@ def sequential_sample_from_model_hat_v2(
     return sample
 
 
-def sequential_sample_from_model_hat(
+def sequential_sample_from_SEM_hat_old(
     static_sem,
     dynamic_sem,
     timesteps: int,
     node_parents: dict,
     initial_values: dict = None,
     interventions: dict = None,
-    seed=None,
 ):
     """
     Function to sequentially sample a dynamic Bayesian network using ESTIMATED SEMs.
@@ -267,7 +232,6 @@ def sequentially_sample_model(
     initial_values=None,
     interventions=None,
     node_parents=None,
-    emission_parents=None,
     sample_count=100,
     epsilon=None,
     use_sem_estimate=False,
@@ -288,7 +252,7 @@ def sequentially_sample_model(
     for i in range(sample_count):
         # This option uses the estimates of the SEMs, estimates found through use of GPs.
         if use_sem_estimate:
-            tmp = sequential_sample_from_model_hat(
+            tmp = sequential_sample_from_SEM_hat(
                 static_sem=static_sem,
                 dynamic_sem=dynamic_sem,
                 timesteps=total_timesteps,
@@ -304,7 +268,7 @@ def sequentially_sample_model(
             else:
                 epsilon_term = epsilon
 
-            tmp = sequential_sample_from_model(
+            tmp = sequential_sample_from_true_SEM(
                 static_sem=static_sem,
                 dynamic_sem=dynamic_sem,
                 timesteps=total_timesteps,

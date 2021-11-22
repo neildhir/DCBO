@@ -278,7 +278,7 @@ class CBO(Root):
                 ],
                 target=target,
                 target_value=self.optimal_blanket[self.base_target_variable][temporal_index],
-                node_children=self.node_children,
+                G=self.G,
             )
             check_blanket(
                 self.assigned_blanket, self.base_target_variable, temporal_index, self.manipulative_variables,

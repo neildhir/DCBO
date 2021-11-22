@@ -144,21 +144,18 @@ class Root:
 
         # Objective function params
         self.bo_model = {t: {es: None for es in self.exploration_sets} for t in range(self.T)}
-
+        # Target functions for Bayesian optimisation - ground truth
+        self.target_functions = deepcopy(self.bo_model)
         # Store true objective function
         self.ground_truth = ground_truth
-
         # Number of points where to evaluate acquisition function
         self.num_anchor_points = num_anchor_points
         # Assigned during optimisation
         self.mean_function = deepcopy(self.bo_model)
         self.variance_function = deepcopy(self.bo_model)
         # Store the dict for mean and var values computed in the acquisition function
-        self.mean_dict_store = deepcopy(self.bo_model)
+        self.mean_dict_store = {t: {es: {} for es in self.exploration_sets} for t in range(self.T)}
         self.var_dict_store = deepcopy(self.mean_dict_store)
-        # Target functions for Bayesian optimisation - ground truth
-        self.target_functions = deepcopy(self.bo_model)
-
         # For logging
         self.sequence_of_interventions_during_trials = [[] for _ in range(self.T)]
 
@@ -418,19 +415,7 @@ class Root:
                 )
             # Use true sem
             else:
-                raise NotImplementedError("This function has to be updated.")
-                # (
-                #     self.mean_function[temporal_index][es],
-                #     self.variance_function[temporal_index][es],
-                # ) = update_sufficient_statistics(
-                #     temporal_index,
-                #     es,
-                #     self.node_children,
-                #     self.true_initial_sem,
-                #     self.true_sem,
-                #     dynamic=dynamic,
-                #     assigned_blanket=assigned_blanket,  # At t=0 this is a dummy variable as it has not been assigned yet.
-                # )
+                raise NotImplementedError("This function has to be updated to reflect recent changes in 'hat' version.")
 
     def _update_observational_data(self, temporal_index):
         if temporal_index > 0:

@@ -6,7 +6,7 @@ from numpy import array, hstack, linspace, meshgrid, newaxis, sqrt
 from pandas import DataFrame
 from matplotlib.ticker import MaxNLocator
 from seaborn import jointplot, set_context, set_style
-from .sequential_causal_functions import sequentially_sample_model
+from .sequential_sampling import sequentially_sample_model
 
 
 def select_data(samples, variables, time_indices):
