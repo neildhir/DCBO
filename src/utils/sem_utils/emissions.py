@@ -60,7 +60,7 @@ def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
                 edge_fit_mat[i, coords[j]] -= 1
 
     # Assign estimators to source nodes (these don't exist in edge_fit_mat)
-    for v in [vv for vv in dict(G.in_degree) if G.in_degree(vv) == 0]:
+    for v in nodes[where(emit_adj_mat.sum(axis=0) == 0)]:
         var, t = v.split("_")
         t = int(t)
         # This is a source node so we need to find the marginal from the observational data.
