@@ -1,6 +1,3 @@
-"""
-Main DCBO class.
-"""
 from typing import Callable
 from numpy import squeeze
 from numpy.core.multiarray import ndarray
@@ -86,9 +83,7 @@ class DCBO(BaseClassDCBO):
         self.seed = seed
         self.sample_anchor_points = sample_anchor_points
         self.seed_anchor_points = seed_anchor_points
-        # Convert observational samples to dict of temporal lists.
-        # We do this because at each time-index we may have a different number of samples.
-        # Because of this, samples need to be stored one lists per time-step.
+        # Convert observational samples to dict of temporal lists. We do this because at each time-index we may have a different number of samples. Because of this, samples need to be stored one lists per time-step.
         self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
 
     def run_optimization(self):
@@ -100,9 +95,9 @@ class DCBO(BaseClassDCBO):
         for temporal_index in trange(self.T, desc="Time index"):
 
             if self.debug_mode:
-                print("\n\t\t\t\t###########################")
+                print("\n\n>>>")
                 print("\t\t\t\t# Time: {}".format(temporal_index))
-                print("\t\t\t\t###########################\n")
+                print("<<<\n\n")
 
             # Evaluate each target
             target = self.all_target_variables[temporal_index]
@@ -127,13 +122,12 @@ class DCBO(BaseClassDCBO):
                 )
                 self._get_observational_hp_transition(self.sem_trans_fncs)
 
-            # Refit the functions if we have added extra data with use_di or we are online
-            # therefore we have not fitted the data yet
+            # Refit the functions if we have added extra data with use_di or we are online therefore we have not fitted the data yet
             if temporal_index > 0 and (self.use_di or self.online or isinstance(self.n_obs_t, list)):
                 if isinstance(self.n_obs_t, list) and self.n_obs_t[temporal_index] == 1:
-                    self._update_sem_functions(temporal_index, temporal_index_data=temporal_index - 1)
+                    self._update_sem_fncs(temporal_index, temporal_index_data=temporal_index - 1)
                 else:
-                    self._update_sem_functions(temporal_index)
+                    self._update_sem_fncs(temporal_index)
 
             # Get blanket to compute y_new
             assigned_blanket = self._get_assigned_blanket(temporal_index)
@@ -147,16 +141,10 @@ class DCBO(BaseClassDCBO):
                     print("<<<\n\n")
 
                 if it == 0:
-                    self.trial_type[temporal_index].append("o")  # For 'o'bserve
-                    # Check which current target we are dealing with
-                    _, target_temporal_index = target.split("_")
-                    assert int(target_temporal_index) == temporal_index
 
+                    self.trial_type[temporal_index].append("o")  # For 'o'bserve
                     sem_hat = self.make_sem_hat(
-                        summary_graph_node_parents=self.summary_graph_node_parents,
-                        emission_functions=self.sem_emit_fncs,
-                        transition_functions=self.sem_trans_fncs,
-                        independent_causes=self.independent_causes,
+                        G=self.G, emission_fncs=self.sem_emit_fncs, transition_fncs=self.sem_trans_fncs
                     )
                     self.static_sem = sem_hat().static(moment=0)  # for t = 0
                     self.sem = sem_hat().dynamic(moment=0)  # for t > 0
@@ -180,7 +168,6 @@ class DCBO(BaseClassDCBO):
                             )
 
                 else:
-                    # >>>INTERVENE<<<
 
                     # Presently find the optimal value of Y_t
                     current_best_global_target = eval(self.task)(self.outcome_values[temporal_index])
@@ -196,7 +183,7 @@ class DCBO(BaseClassDCBO):
                                 self._update_bo_model(temporal_index, es)
                     if self.debug_mode:
                         self._plot_surrogate_model(temporal_index)
-                    self.trial_type[temporal_index].append("i")
+                    self.trial_type[temporal_index].append("i")  # for intervene
 
                     # Compute acquisition function given the updated BO models for the interventional data. Notice that we use current_global and the costs to compute the acquisition functions.
                     self._evaluate_acquisition_functions(temporal_index, current_best_global_target, it)
@@ -230,7 +217,6 @@ class DCBO(BaseClassDCBO):
 
                     # Store local optimal exploration set corresponding intervention levels
                     self.outcome_values[temporal_index].append(y_new)
-
                     self.optimal_outcome_values_during_trials[temporal_index].append(
                         eval(self.task)(y_new, current_best_global_target)
                     )
@@ -248,17 +234,15 @@ class DCBO(BaseClassDCBO):
 
                     # Update model and optimize given the collected point
                     self._update_bo_model(temporal_index, best_es)
-
                     if self.debug_mode:
-                        print("########################### results of optimization ##################")
+                        print(">>> Results of optimization")
                         self._plot_surrogate_model(temporal_index)
-
-                    if self.debug_mode:
                         print(
                             "### Optimized model: ###", best_es, self.bo_model[temporal_index][best_es].model,
                         )
 
             # Post optimisation assignments (post this time-index that is)
+
             # Index of the best value of the objective function
             best_objective_fnc_value_idx = (
                 self.outcome_values[temporal_index].index(eval(self.task)(self.outcome_values[temporal_index])) - 1
@@ -319,7 +303,7 @@ class DCBO(BaseClassDCBO):
                 ],
                 target=target,
                 target_value=self.optimal_blanket[self.base_target_variable][temporal_index],
-                node_children=self.node_children,
+                G=self.G,
             )
             check_blanket(
                 self.assigned_blanket, self.base_target_variable, temporal_index, self.manipulative_variables,

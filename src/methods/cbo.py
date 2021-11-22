@@ -237,7 +237,6 @@ class CBO(Root):
 
             # 1) Best intervention for this temporal index
             for es in self.exploration_sets:
-
                 if isinstance(
                     self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx], ndarray,
                 ):
@@ -337,43 +336,12 @@ class CBO(Root):
 
         # Loop over all emission functions in this time-slice
         for pa in self.sem_emit_fncs[t]:
-            if len(pa) == 2 and pa[0] == None:
-                pa_y = pa[1].split("_")[0]
-                #  Source node
-                xx = make_column_shape_2D(self.observational_samples[pa_y][t])
-                self.sem_emit_fncs[t][pa_y] = KernelDensity(kernel="gaussian").fit(xx)
-            elif len(pa) == 3 and isinstance(pa[1], int):
-                a, b = pa[0].split("_")[0], pa[2].split("_")[0]
-                #  A fork in which a node has more than one child
-                xx = make_column_shape_2D(self.observational_samples[a][t])
-                yy = make_column_shape_2D(self.observational_samples[b][t])
-            else:
-                xx = []
-                #  Loop over all parents / explanatory variables
-                for v in pa:
-                    x = make_column_shape_2D(self.observational_samples[v.split("_")[0]][t])
-                    xx.append(x)
-                xx = np.hstack(xx)
-                # Estimand (looks only at within time-slice targets)
-                ys = set.intersection(*map(set, [self.G.successors(v) for v in pa]))
-                if len(ys) == 1:
-                    for y in ys:
-                        yy = make_column_shape_2D(self.observational_samples[y.split("_")[0]][t])
-                else:
-                    raise NotImplementedError("Have not covered DAGs with this type of connectivity.", (pa, ys))
-
-            assert len(xx.shape) == 2
-            assert len(yy.shape) == 2
-            assert xx.shape[0] == yy.shape[0]  # Column arrays
-
-            if xx.shape[0] != yy.shape[0]:
-                min_rows = np.min((xx.shape[0], yy.shape[0]))
-                xx = xx[: int(min_rows)]
-                yy = yy[: int(min_rows)]
-
-            # Update in-place
-            self.sem_emit_fncs[t][pa].set_XY(X=xx, Y=yy)
-            self.sem_emit_fncs[t][pa].optimize()
+            # Get relevant data for updating emission functions
+            xx, yy = self._get_sem_emit_obs(t, pa)
+            if xx and yy:
+                # Update in-place
+                self.sem_emit_fncs[t][pa].set_XY(X=xx, Y=yy)
+                self.sem_emit_fncs[t][pa].optimize()
 
     def _update_bo_model(
         self, temporal_index: int, exploration_set: tuple, alpha: float = 2, beta: float = 0.5,

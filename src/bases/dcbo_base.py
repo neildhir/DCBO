@@ -1,7 +1,3 @@
-"""
-DCBO base class.
-"""
-
 from copy import deepcopy
 
 import numpy as np
@@ -11,11 +7,9 @@ from GPy.core.parameterization import priors
 from GPy.models import GPRegression
 from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.gp_utils import (
-    fit_gp,
-    sequential_sample_from_SEM_hat,
-)
-from src.utils.sem_utils.transitions import fit_sem_trans_fncs, get_transition_input_output_pairs
+from src.utils.gp_utils import fit_gp, sequential_sample_from_SEM_hat
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs
+from src.utils.sem_utils.transitions import fit_sem_trans_fncs
 from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
 from src.utils.utilities import make_column_shape_2D
 
@@ -23,10 +17,6 @@ from .root import Root
 
 
 class BaseClassDCBO(Root):
-    """
-    Base class for the DCBO.
-    """
-
     def __init__(
         self,
         G: str,
@@ -75,154 +65,104 @@ class BaseClassDCBO(Root):
             "change_points": change_points,
         }
         super().__init__(**root_args)
-
-        # self.transfer_pairs = get_transition_input_output_pairs(self.node_parents)
+        # Fit Gaussian processes to emissions
+        self.sem_emit_fncs = fit_sem_emit_fncs(self.G, self.observational_samples)
         #  The fit emission function lives in the main class of the method
         self.sem_trans_fncs = fit_sem_trans_fncs(self.G, self.observational_samples)
-        # TODO: we probably dont' need this anymor
-        # self.time_indexed_trans_fncs_inputs = {t: [] for t in range(1, self.T)}
-        # for t in range(1, self.T):
-        #     for key in self.transfer_pairs.keys():
-        #         tt = int(self.transfer_pairs[key].split("_")[1])
-        #         if t == tt:
-        #             self.time_indexed_trans_fncs_inputs[t].append(key)
 
-    def _update_sem_emit_fncs(self, temporal_index: int, temporal_index_data=None) -> None:
+    def _update_sem_fncs(self, temporal_index: int, temporal_index_data: int = None) -> None:
+        """
+        Function to update transition and emission functions for the online inference case.
 
-        for inputs in list(self.sem_emit_fncs[temporal_index].keys()):
-            output = self.emission_pairs[inputs].split("_")[0]
-            # Multivariate conditional
-            if len(inputs) > 1:
-                xx = []
-                for node in inputs:
-                    start_node, time = node.split("_")
-                    if temporal_index_data is not None:
-                        time = temporal_index_data
+        Parameters
+        ----------
+        temporal_index : int
+            Current temporal index of the run method.
+        temporal_index_data : int, optional
+            [description], by default None
+        """
+
+        if temporal_index_data is None:
+            temporal_index_data = temporal_index
+
+        #  Update
+        self._update_sem_emit_fncs(temporal_index, t_index_data=temporal_index_data)
+        self._update_sem_trans_fncs(temporal_index, t_index_data=temporal_index_data)
+
+    def _update_sem_emit_fncs(self, t: int, t_index_data: int = None) -> None:
+
+        for pa in self.sem_emit_fncs[t]:
+            # Get relevant data for updating emission functions
+            xx, yy = self._get_sem_emit_obs(t, pa, t_index_data)
+            if xx and yy:
+                if t_index_data == t:
+                    # Online / we have data
+                    if any(self.hyperparam_obs_emit.values()):
+                        self.sem_emit_fncs[t][pa] = fit_gp(
+                            x=xx,
+                            y=yy,
+                            lengthscale=self.hyperparam_obs_emit[pa][1],
+                            variance=self.hyperparam_obs_emit[pa][0],
+                        )
                     else:
-                        time = int(time)
-                        assert time == temporal_index_data, (time, temporal_index_data)
-                    #  Input
-                    x = make_column_shape_2D(self.observational_samples[start_node][time])
-                    xx.append(x)
-                xx = np.hstack(xx)
-                #  Output
-                yy = make_column_shape_2D(self.observational_samples[output][time])
-            # Univariate conditional
-            elif len(inputs) == 1:
-                start_node, time = inputs[0].split("_")
-                if temporal_index_data is not None:
-                    #  Use past conditional
-                    time = temporal_index_data
+                        # Update in-place
+                        self.sem_emit_fncs[t][pa].set_XY(X=xx, Y=yy)
+                        self.sem_emit_fncs[t][pa].optimize()
                 else:
-                    time = int(time)
-                    assert time == temporal_index_data, (time, temporal_index_data)
-
-                #  Input
-                xx = make_column_shape_2D(self.observational_samples[start_node][time])
-                #  Output
-                yy = make_column_shape_2D(self.observational_samples[output][time])
-            else:
-                raise ValueError("The length of the tuple is: {}".format(len(inputs)))
-
-            assert len(xx.shape) == 2
-            assert len(yy.shape) == 2
-            assert xx.shape[0] == yy.shape[0]  # Column arrays
-
-            if xx.shape[0] != yy.shape[0]:
-                min_rows = np.min((xx.shape[0], yy.shape[0]))
-                xx = xx[: int(min_rows)]
-                yy = yy[: int(min_rows)]
-
-            if temporal_index_data == temporal_index:
-                # Online / we have data
-                if any(self.hyperparam_obs_emit.values()):
-                    self.sem_emit_fncs[temporal_index][inputs] = fit_gp(
-                        x=xx,
-                        y=yy,
-                        lengthscale=self.hyperparam_obs_emit[inputs][1],
-                        variance=self.hyperparam_obs_emit[inputs][0],
+                    # No data for this time-step
+                    assert t_index_data != t and t_index_data < t, (
+                        t_index_data,
+                        t,
                     )
-                else:
-                    # Update in-place
-                    self.sem_emit_fncs[temporal_index][inputs].set_XY(X=xx, Y=yy)
-                    self.sem_emit_fncs[temporal_index][inputs].optimize()
-            else:
-                # No data for this time-step
-                assert temporal_index_data != temporal_index and temporal_index_data < temporal_index, (
-                    temporal_index_data,
-                    temporal_index,
-                )
-                temporal_index_inputs = tuple(v.split("_")[0] + "_" + str(temporal_index_data) for v in inputs)
-                assert temporal_index_inputs in self.sem_emit_fncs[temporal_index_data].keys(), (
-                    temporal_index_inputs,
-                    self.sem_emit_fncs[temporal_index_data].keys(),
-                )
-                self.sem_emit_fncs[temporal_index][inputs] = self.sem_emit_fncs[temporal_index_data][
-                    temporal_index_inputs
-                ]
+                    temporal_index_pa = tuple(v.split("_")[0] + "_" + str(t_index_data) for v in pa)
+                    assert temporal_index_pa in self.sem_emit_fncs[t_index_data], (
+                        temporal_index_pa,
+                        self.sem_emit_fncs[t_index_data].keys(),
+                    )
+                    self.sem_emit_fncs[t][pa] = self.sem_emit_fncs[t_index_data][temporal_index_pa]
 
-    def _update_sem_transmission_functions(self, temporal_index: int, temporal_index_data: int = None) -> None:
+    def _update_sem_trans_fncs(self, t: int, t_index_data: int = None) -> None:
 
-        assert temporal_index > 0
+        assert t > 0
 
-        # Fit transition functions first
-        # for inputs in self.transfer_pairs.keys():
-        for inputs in self.time_indexed_trans_fncs_inputs[temporal_index]:
-            # Transfer input
-            if len(inputs) > 1:
-                # many to one mapping
-                iin_vars = [var.split("_")[0] for var in inputs]
-                iin_times = [int(var.split("_")[1]) for var in inputs]
-                # Auto-regressive structure
-                xx = []
-                for in_var, in_time in zip(iin_vars, iin_times):
-                    xx.append(make_column_shape_2D(self.observational_samples[in_var][in_time]))
-                xx = np.hstack(xx)
-            else:
-                in_var = inputs[0].split("_")[0]
-                in_time = int(inputs[0].split("_")[1])
-                xx = make_column_shape_2D(self.observational_samples[in_var][in_time])
-
-            # Transfer target
-            output = self.transfer_pairs[inputs]
-            # one to one mapping
-            out_var = output.split("_")[0]
-            out_time = int(output.split("_")[1])
-            # Auto-regressive structure
-            yy = make_column_shape_2D(self.observational_samples[out_var][out_time])
+        for y, pa in zip(self.sem, self.sem_trans_fncs[t]):
+            # Independent vars: transition parents to var
+            xx = np.hstack([self.observational_samples[v.split("_")[0]][:, t - 1].reshape(-1, 1) for v in pa])
+            # Estimand
+            yy = self.observational_samples[y][:, t].reshape(-1, 1)
 
             min_size = np.min((xx.shape[0], yy.shape[0]))  # Check rows
             xx = xx[: int(min_size), :]
             yy = yy[: int(min_size), :]
 
-            if temporal_index_data == temporal_index:
+            if t_index_data == t:
                 if any(self.hyperparam_obs_transf.values()):
-                    self.sem_trans_fncs[inputs] = fit_gp(
+                    self.sem_trans_fncs[pa] = fit_gp(
                         x=xx,
                         y=yy,
-                        lengthscale=self.hyperparam_obs_transf[inputs][1],
-                        variance=self.hyperparam_obs_transf[inputs][0],
+                        lengthscale=self.hyperparam_obs_transf[pa][1],
+                        variance=self.hyperparam_obs_transf[pa][0],
                     )
                 else:
-                    self.sem_trans_fncs[inputs].set_XY(X=xx, Y=yy)
-                    self.sem_trans_fncs[inputs].optimize()
+                    self.sem_trans_fncs[pa].set_XY(X=xx, Y=yy)
+                    self.sem_trans_fncs[pa].optimize()
             else:
                 # No data for this time-step
-                assert temporal_index_data != temporal_index and temporal_index_data < temporal_index, (
-                    temporal_index_data,
-                    temporal_index,
+                assert t_index_data != t and t_index_data < t, (
+                    t_index_data,
+                    t,
                 )
                 # Find the input for the past index
-                temporal_index_data_inputs = tuple(v.split("_")[0] + "_" + str(temporal_index_data - 1) for v in inputs)
-                assert temporal_index_data_inputs in self.time_indexed_trans_fncs_inputs[temporal_index_data], (
-                    temporal_index,
-                    temporal_index_data,
-                    inputs,
-                    temporal_index_data_inputs,
-                    self.time_indexed_trans_fncs_inputs[temporal_index_data],
+                temporal_index_data_pa = tuple(v.split("_")[0] + "_" + str(t_index_data - 1) for v in pa)
+                assert temporal_index_data_pa in self.time_indexed_trans_fncs_pa[t_index_data], (
+                    t,
+                    t_index_data,
+                    pa,
+                    temporal_index_data_pa,
+                    self.time_indexed_trans_fncs_pa[t_index_data],
                 )
                 # We use the previous transition function for this time-index
-                self.sem_trans_fncs[inputs] = self.sem_trans_fncs[temporal_index_data_inputs]
+                self.sem_trans_fncs[pa] = self.sem_trans_fncs[temporal_index_data_pa]
 
     def _get_observational_hp_emissions(self, emission_functions, temporal_index):
         # XXX: this is _ONLY_ a valid option for stationary time-series.
@@ -282,14 +222,6 @@ class BaseClassDCBO(Root):
             for var in self.observational_samples.keys():
                 self.observational_samples[var][temporal_index].extend([dic[var][temporal_index]])
                 print(len(self.observational_samples[var][temporal_index]))
-
-    def _update_sem_functions(self, temporal_index, temporal_index_data=None):
-
-        if temporal_index_data is None:
-            temporal_index_data = temporal_index
-
-        self._update_sem_emit_fncs(temporal_index, temporal_index_data=temporal_index_data)
-        self._update_sem_transmission_functions(temporal_index, temporal_index_data=temporal_index_data)
 
     def _get_interventional_hp(self, temporal_index, exploration_set, prior_var, prior_lengthscale):
         if temporal_index > 0 and self.transfer_hp_i:

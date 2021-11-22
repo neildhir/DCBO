@@ -1,20 +1,21 @@
 from copy import deepcopy
 from random import choice
-from typing import Callable
+from typing import Callable, Tuple, Union
 
 import numpy as np
 from matplotlib import pyplot as plt
 from networkx.classes.multidigraph import MultiDiGraph
 from numpy.core.multiarray import ndarray
 from numpy.core.numeric import nan
+from sklearn.neighbors import KernelDensity
 from src.bayes_opt.cost_functions import define_costs
 from src.utils.gp_utils import update_sufficient_statistics_hat
-from src.utils.sequential_sampling import sequentially_sample_model
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
     make_sequential_intervention_dictionary,
 )
+from src.utils.sequential_sampling import sequentially_sample_model
 from src.utils.utilities import (
     check_reshape_add_data,
     convert_to_dict_of_temporal_lists,
@@ -81,21 +82,6 @@ class Root:
         self.base_target_variable = base_target_variable  # This has to be reflected in the CGM
         self.index_name = 0
         self.number_of_trials = number_of_trials
-
-        #   ------------- GRAPH STUFF to be replaced by a non-symetric adjacency matrix
-
-        # TODO: move all of this since BO and ABO don't need to this since they don't use any of it.
-        # TODO: walk through each variable and see which ones are actually used inside BO and ABO.
-
-        #  Induced sub-graph on the nodes in the first time-slice -- it doesn't matter which time-slice we consider since one of the main assumptions is that time-slice topology does not change in the DBN.
-        # time_slice_vars = observation_samples.keys()
-        # self.summary_graph_node_parents, self.causal_order = get_summary_graph_node_parents(time_slice_vars, G)
-        #  Checks what vars in DAG (if any) are independent causes (or 'sources' depending on your background)
-        # self.independent_causes = get_independent_causes(time_slice_vars, G)
-        # Extracted DAG properties
-        # self.node_children, self.node_parents, self.emission_pairs = get_emissions_input_output_pairs(self.T, self.G)
-
-        #   ------------- GRAPH STUFF to be replaced by a non-symetric adjacency matrix
 
         #  Parents of all nodes
         self.node_pars = {node: None for node in G.nodes}
@@ -235,6 +221,53 @@ class Root:
             return (*[v for v in self.node_pars[node] if v.split("_")[1] == str(temporal_index)],)
         else:
             return tuple(self.node_pars[node])
+
+    def _get_sem_emit_obs(
+        self, t: int, pa: tuple, t_index_data: int = None
+    ) -> Tuple[Union[None, ndarray], Union[None, ndarray]]:
+
+        if t_index_data is not None:
+            assert t_index_data - 1 == t, (t_index_data, t)
+            #  Use past conditional
+            t = t_index_data
+
+        if len(pa) == 2 and pa[0] == None:
+            # Source node
+            pa_y = pa[1].split("_")[0]
+            xx = make_column_shape_2D(self.observational_samples[pa_y][t])
+            self.sem_emit_fncs[t][pa_y] = KernelDensity(kernel="gaussian").fit(xx)
+
+            return (None, None)
+        elif len(pa) == 3 and isinstance(pa[1], int):
+            # A fork in which a node has more than one child
+            a, b = pa[0].split("_")[0], pa[2].split("_")[0]
+            xx = make_column_shape_2D(self.observational_samples[a][t])
+            yy = make_column_shape_2D(self.observational_samples[b][t])
+        else:
+            # Loop over all parents / explanatory variables
+            xx = []
+            for v in pa:
+                x = make_column_shape_2D(self.observational_samples[v.split("_")[0]][t])
+                xx.append(x)
+            xx = np.hstack(xx)
+            # Estimand (looks only at within time-slice targets)
+            ys = set.intersection(*map(set, [self.G.successors(v) for v in pa]))
+            if len(ys) == 1:
+                for y in ys:
+                    yy = make_column_shape_2D(self.observational_samples[y.split("_")[0]][t])
+            else:
+                raise NotImplementedError("Have not covered DAGs with this type of connectivity.", (pa, ys))
+
+        assert len(xx.shape) == 2
+        assert len(yy.shape) == 2
+        assert xx.shape[0] == yy.shape[0]  # Column arrays
+
+        if xx.shape[0] != yy.shape[0]:
+            min_rows = np.min((xx.shape[0], yy.shape[0]))
+            xx = xx[: int(min_rows)]
+            yy = yy[: int(min_rows)]
+
+        return xx, yy
 
     def _plot_surrogate_model(self, temporal_index):
         # Plot model

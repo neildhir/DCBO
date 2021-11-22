@@ -6,7 +6,7 @@ from .sequential_sampling import sequential_sample_from_true_SEM
 
 def create_n_dimensional_intervention_grid(limits: list, size_intervention_grid: int = 100):
     """
-    Usage: combine_arrays([[-2,2],[-5,10]],10)
+    Usage: combine_n_dimensional_intervention_grid([[-2,2],[-5,10]],10)
     """
     if any(isinstance(el, list) for el in limits) is False:
         # We are just passing a single list
