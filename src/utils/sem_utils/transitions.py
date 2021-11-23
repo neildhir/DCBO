@@ -22,27 +22,28 @@ def fit_sem_trans_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
     dict
         A dictionary of transition functions.
     """
-    T = G.T
     # Emission adjacency matrix
     _, trans_adj_mat = get_emit_and_trans_adjacency_mats(G)
     nodes = array(G.nodes())
     # Number of nodes per time-slice
-    v_n = len(nodes) / T
+    v_n = len(nodes) / G.T
     assert v_n.is_integer()
-    fncs = {t: {} for t in range(T)}
+    fncs = {t: {} for t in range(G.T)}
 
-    for i, v in enumerate(nodes[int(v_n) :], start=T):
-        var, t = v.split("_")
-        t = int(t)
-        # Parents of estimand variable, we could use G.predecessors(v) but it includes the emission variables.
-        pa_y = nodes[where(trans_adj_mat[:, i] == 1)]
+    for i, v in enumerate(nodes[int(v_n) :], start=G.T):
+        var, time = v.split("_")
+        t = int(time)
+        assert t > 0
         # Estimand
         yy = D_obs[var][:, t].reshape(-1, 1)
+        # Parents of estimand variable, we could use G.predecessors(v) but it includes the emission variables.
+        pa_y = nodes[where(trans_adj_mat[:, i] == 1)]
+        assert all([vv.split("_")[1] == str(t - 1) for vv in pa_y])
         if len(pa_y) == 0:
             # This node has no incoming edges from the past time-slice
             continue
         else:
-            xx = hstack([D_obs[vv.split("_")[0]][:, t].reshape(-1, 1) for vv in pa_y])
+            xx = hstack([D_obs[vv.split("_")[0]][:, t - 1].reshape(-1, 1) for vv in pa_y])
             #  Fit estimator
             fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
 
