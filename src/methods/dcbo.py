@@ -118,15 +118,11 @@ class DCBO(BaseClassDCBO):
             assigned_blanket = self._get_assigned_blanket(temporal_index)
 
             for it in range(self.number_of_trials):
-
                 if it == 0:
-
                     self.trial_type[temporal_index].append("o")  # For 'o'bserve
                     sem_hat = self.make_sem_hat(
                         G=self.G, emission_fncs=self.sem_emit_fncs, transition_fncs=self.sem_trans_fncs
                     )
-                    self.static_sem = sem_hat().static(moment=0)  # for t = 0
-                    self.sem = sem_hat().dynamic(moment=0)  # for t > 0
 
                     # New mean functions and var functions given the observational data. This updates the prior.
                     self._update_sufficient_statistics(
@@ -145,7 +141,6 @@ class DCBO(BaseClassDCBO):
                             self._plot_conditional_distributions(
                                 temporal_index, it,
                             )
-
                 else:
 
                     # Set surrogate models
