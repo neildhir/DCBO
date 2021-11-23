@@ -6,9 +6,9 @@ import numpy as np
 from matplotlib import pyplot as plt
 from networkx.classes.multidigraph import MultiDiGraph
 from numpy.core.multiarray import ndarray
-from numpy.core.numeric import nan
+from numpy.core.numeric import nan, squeeze
 from sklearn.neighbors import KernelDensity
-from src.bayes_opt.cost_functions import define_costs
+from src.bayes_opt.cost_functions import define_costs, total_intervention_cost
 from src.utils.gp_utils import update_sufficient_statistics_hat
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
@@ -565,3 +565,72 @@ class Root:
         # Check optimization results for the current temporal index before moving on
         self._check_optimization_results(t)
 
+    def _per_trial_computations(self, t: int, it: int, target: str, assigned_blanket: dict, method: str = None):
+
+        if self.debug_mode:
+            print("\n\n>>>")
+            print("Iteration:", it)
+            print("<<<\n\n")
+            self._plot_surrogate_model(t)
+
+        # Presently find the optimal value of Y_t
+        current_best_global_target = eval(self.task)(self.outcome_values[t])
+
+        #  Just to indicate that in this trial we are explicitly intervening in the system
+        self.trial_type[t].append("i")
+
+        # Compute acquisition function given the updated BO models for the interventional data. Notice that we use current_global and the costs to compute the acquisition functions.
+        self._evaluate_acquisition_functions(t, current_best_global_target, it)
+
+        # Best exploration set based on acquired target-values [best_es == set of all manipulative varibles for BO and ABO]
+        best_es = eval("max")(self.y_acquired, key=self.y_acquired.get)
+
+        # Get the correspoding values for this intervention set
+        if method == "ABO":
+            # Discard the time dimension
+            self.corresponding_x[best_es] = self.corresponding_x[best_es][:, :-1]
+        new_interventional_data_x = self.corresponding_x[best_es]
+        self._check_new_point(best_es, t)
+
+        # Get the correspoding outcome values for this intervention set
+        y_new = self.target_functions[t][best_es](
+            current_target=target,
+            intervention_levels=squeeze(new_interventional_data_x),
+            assigned_blanket=assigned_blanket,
+        )
+
+        if self.debug_mode:
+            print("Selected set:", best_es)
+            print("Intervention value:", new_interventional_data_x)
+            print("Outcome:", y_new)
+
+        # Update interventional data
+        self._get_updated_interventional_data(new_interventional_data_x, y_new, best_es, t)
+
+        # Evaluate cost of intervention
+        self.per_trial_cost[t].append(
+            total_intervention_cost(best_es, self.cost_functions, self.interventional_data_x[t][best_es],)
+        )
+
+        # Store local optimal exploration set corresponding intervention levels
+        self.outcome_values[t].append(y_new)
+        self.optimal_outcome_values_during_trials[t].append(eval(self.task)(y_new, current_best_global_target))
+
+        # Store the intervention
+        if len(new_interventional_data_x.shape) != 2:
+            self.optimal_intervention_levels[t][best_es][it] = make_column_shape_2D(new_interventional_data_x)
+        else:
+            self.optimal_intervention_levels[t][best_es][it] = new_interventional_data_x
+
+        # Store the currently best intervention set
+        self.sequence_of_interventions_during_trials[t].append(best_es)
+
+        #  Update the best_es BO model
+        self._update_bo_model(t, best_es)
+
+        if self.debug_mode:
+            print(">>> Results of optimization")
+            self._plot_surrogate_model(t)
+            print(
+                "### Optimized model: ###", best_es, self.bo_model[t][best_es].model,
+            )

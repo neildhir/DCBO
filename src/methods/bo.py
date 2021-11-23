@@ -5,13 +5,11 @@ from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
 from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
-from numpy import random, squeeze
+from numpy import random
 from src.bases.root import Root
-from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
 from src.utils.utilities import (
     convert_to_dict_of_temporal_lists,
-    make_column_shape_2D,
     standard_mean_function,
     zero_variance_adjustment,
 )
@@ -88,76 +86,13 @@ class BO(Root):
             # Check which current target we are dealing with, and in initial_sem sequence where we are in time
             _, target_temporal_index = target.split("_")
             assert int(target_temporal_index) == temporal_index
-            best_es = self.best_initial_es
 
             # Get blanket to compute y_new
             assigned_blanket = self._get_assigned_blanket(temporal_index)
 
             for it in range(self.number_of_trials):
-
-                if self.debug_mode:
-                    print("\n\n>>>")
-                    print("Iteration:", it)
-                    print("<<<\n\n")
-
-                # Presently find the optimal value of Y_t
-                current_best_global_target = eval(self.task)(self.outcome_values[temporal_index])
-
-                self.trial_type[temporal_index].append("i")
-
-                # Compute acquisition function given the updated BO models for the interventional data. Notice that we use current_global and the costs to compute the acquisition functions.
-                self._evaluate_acquisition_functions(temporal_index, current_best_global_target, it)
-
-                new_interventional_data_x = self.corresponding_x[best_es]
-
-                # Best exploration set based on acquired target-values
-                self._check_new_point(best_es, temporal_index)
-
-                y_new = self.target_functions[temporal_index][best_es](
-                    current_target=target,
-                    intervention_levels=squeeze(new_interventional_data_x),
-                    assigned_blanket=assigned_blanket,
-                )
-
-                # Update interventional data
-                self._get_updated_interventional_data(new_interventional_data_x, y_new, best_es, temporal_index)
-
-                if self.debug_mode:
-                    print("Selected set:", best_es)
-                    print("Intervention value:", new_interventional_data_x)
-                    print("Outcome:", y_new)
-
-                # Evaluate cost of intervention
-                self.per_trial_cost[temporal_index].append(
-                    total_intervention_cost(
-                        best_es, self.cost_functions, self.interventional_data_x[temporal_index][best_es],
-                    )
-                )
-
-                # Store local optimal exploration set corresponding intervention levels
-                self.outcome_values[temporal_index].append(y_new)
-
-                self.optimal_outcome_values_during_trials[temporal_index].append(
-                    eval(self.task)(y_new, current_best_global_target)
-                )
-
-                # Store the intervention
-                if len(new_interventional_data_x.shape) != 2:
-                    self.optimal_intervention_levels[temporal_index][best_es][it] = make_column_shape_2D(
-                        new_interventional_data_x
-                    )
-                else:
-                    self.optimal_intervention_levels[temporal_index][best_es][it] = new_interventional_data_x
-
-                # Store the currently best intervention set
-                self.sequence_of_interventions_during_trials[temporal_index].append(best_es)
-
-                self._update_bo_model(temporal_index, best_es)
-
-                if self.debug_mode:
-                    print(
-                        "### Optimized model: ###", self.bo_model[temporal_index][best_es].model,
-                    )
+                #  This function runs the actual computation -- calls are identical for all methods
+                self._per_trial_computations(temporal_index, it, target, assigned_blanket)
 
             # Post optimisation assignments (post this time-index that is)
             self._post_optimisation_assignments(target, temporal_index)

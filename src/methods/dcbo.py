@@ -124,12 +124,6 @@ class DCBO(BaseClassDCBO):
 
             for it in range(self.number_of_trials):
 
-                if self.debug_mode:
-                    print("\n\n>>>")
-                    print("Iteration:", it)
-                    print("Trials undertaken so far:", self.trial_type)
-                    print("<<<\n\n")
-
                 if it == 0:
 
                     self.trial_type[temporal_index].append("o")  # For 'o'bserve
@@ -159,9 +153,6 @@ class DCBO(BaseClassDCBO):
 
                 else:
 
-                    # Presently find the optimal value of Y_t
-                    current_best_global_target = eval(self.task)(self.outcome_values[temporal_index])
-
                     # Set surrogate models
                     if self.trial_type[temporal_index][-1] == "o":
                         # If we observed, we _create_ new BO models with updated mean functions and var functions
@@ -171,65 +162,9 @@ class DCBO(BaseClassDCBO):
                                 and self.interventional_data_y[temporal_index][es] is not None
                             ):
                                 self._update_bo_model(temporal_index, es)
-                    if self.debug_mode:
-                        self._plot_surrogate_model(temporal_index)
-                    self.trial_type[temporal_index].append("i")  # for intervene
 
-                    # Compute acquisition function given the updated BO models for the interventional data. Notice that we use current_global and the costs to compute the acquisition functions.
-                    self._evaluate_acquisition_functions(temporal_index, current_best_global_target, it)
-
-                    # Best exploration set based on acquired target-values
-                    best_es = eval("max")(self.y_acquired, key=self.y_acquired.get)
-                    new_interventional_data_x = self.corresponding_x[best_es]
-                    self._check_new_point(best_es, temporal_index)
-
-                    # Compute target value for selected intervention
-                    y_new = self.target_functions[temporal_index][best_es](
-                        current_target=target,
-                        intervention_levels=squeeze(new_interventional_data_x),
-                        assigned_blanket=assigned_blanket,
-                    )
-
-                    if self.debug_mode:
-                        print("Selected set:", best_es)
-                        print("Intervention value:", new_interventional_data_x)
-                        print("Outcome:", y_new)
-
-                    # Update interventional data
-                    self._get_updated_interventional_data(new_interventional_data_x, y_new, best_es, temporal_index)
-
-                    # Evaluate cost of intervention
-                    self.per_trial_cost[temporal_index].append(
-                        total_intervention_cost(
-                            best_es, self.cost_functions, self.interventional_data_x[temporal_index][best_es],
-                        )
-                    )
-
-                    # Store local optimal exploration set corresponding intervention levels
-                    self.outcome_values[temporal_index].append(y_new)
-                    self.optimal_outcome_values_during_trials[temporal_index].append(
-                        eval(self.task)(y_new, current_best_global_target)
-                    )
-
-                    # Store the intervention
-                    if len(new_interventional_data_x.shape) != 2:
-                        self.optimal_intervention_levels[temporal_index][best_es][it] = make_column_shape_2D(
-                            new_interventional_data_x
-                        )
-                    else:
-                        self.optimal_intervention_levels[temporal_index][best_es][it] = new_interventional_data_x
-
-                    #  Store the currently best intervention set
-                    self.sequence_of_interventions_during_trials[temporal_index].append(best_es)
-
-                    # Update model and optimize given the collected point
-                    self._update_bo_model(temporal_index, best_es)
-                    if self.debug_mode:
-                        print(">>> Results of optimization")
-                        self._plot_surrogate_model(temporal_index)
-                        print(
-                            "### Optimized model: ###", best_es, self.bo_model[temporal_index][best_es].model,
-                        )
+                    # This function runs the actual computation -- calls are identical for all methods
+                    self._per_trial_computations(temporal_index, it, target, assigned_blanket)
 
             # Post optimisation assignments (post this time-index that is)
-            self._post_optimisation_assignments(target, temporal_index, True)
+            self._post_optimisation_assignments(target, temporal_index, DCBO=True)
