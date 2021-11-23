@@ -1,12 +1,8 @@
 from typing import Callable
 from numpy import squeeze
-from numpy.core.multiarray import ndarray
 from src.bases.dcbo_base import BaseClassDCBO
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.utils.utilities import (
-    assign_blanket,
-    assign_blanket_hat,
-    check_blanket,
     convert_to_dict_of_temporal_lists,
     make_column_shape_2D,
 )
@@ -86,7 +82,7 @@ class DCBO(BaseClassDCBO):
         # Convert observational samples to dict of temporal lists. We do this because at each time-index we may have a different number of samples. Because of this, samples need to be stored one lists per time-step.
         self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
 
-    def run_optimization(self):
+    def run(self):
 
         if self.debug_mode is True:
             assert self.ground_truth is not None, "Provide ground truth to plot"
@@ -94,14 +90,8 @@ class DCBO(BaseClassDCBO):
         # Walk through the graph, from left to right, i.e. the temporal dimension
         for temporal_index in trange(self.T, desc="Time index"):
 
-            if self.debug_mode:
-                print("\n\n>>>")
-                print("\t\t\t\t# Time: {}".format(temporal_index))
-                print("<<<\n\n")
-
             # Evaluate each target
             target = self.all_target_variables[temporal_index]
-
             # Check which current target we are dealing with, and in initial_sem sequence where we are in time
             _, target_temporal_index = target.split("_")
             assert int(target_temporal_index) == temporal_index
@@ -242,73 +232,4 @@ class DCBO(BaseClassDCBO):
                         )
 
             # Post optimisation assignments (post this time-index that is)
-
-            # Index of the best value of the objective function
-            best_objective_fnc_value_idx = (
-                self.outcome_values[temporal_index].index(eval(self.task)(self.outcome_values[temporal_index])) - 1
-            )
-
-            # 1) Best intervention for this temporal index
-            for es in self.exploration_sets:
-                if isinstance(
-                    self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx], ndarray,
-                ):
-                    # Check to see that the optimal intervention is not None
-                    check_val = self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx]
-
-                    assert check_val is not None, (
-                        temporal_index,
-                        self.optimal_intervention_sets[temporal_index],
-                        best_objective_fnc_value_idx,
-                        es,
-                    )
-                    # This is the, overall, best intervention set for this temporal index.
-                    self.optimal_intervention_sets[temporal_index] = es
-                    break  # There is only one so we can break here
-
-            # 2) Blanket stores optimal values (interventions and targets) found during DCBO.
-            self.optimal_blanket[self.base_target_variable][temporal_index] = eval(self.task)(
-                self.outcome_values[temporal_index]
-            )
-
-            # 3) Write optimal interventions to the optimal blanket
-            for i, es_member in enumerate(set(es).intersection(self.manipulative_variables)):
-                self.optimal_blanket[es_member][temporal_index] = float(
-                    self.optimal_intervention_levels[temporal_index][self.optimal_intervention_sets[temporal_index]][
-                        best_objective_fnc_value_idx
-                    ][:, i]
-                )
-
-            # 4) Finally, populate the summary blanket with info found in (1) to (3)
-            assign_blanket_hat(
-                self.assigned_blanket_hat,
-                self.optimal_intervention_sets[temporal_index],  # Exploration set
-                self.optimal_intervention_levels[temporal_index][self.optimal_intervention_sets[temporal_index]][
-                    best_objective_fnc_value_idx
-                ],  # Intervention level
-                target=target,
-                target_value=self.optimal_blanket[self.base_target_variable][temporal_index],
-            )
-            check_blanket(
-                self.assigned_blanket_hat, self.base_target_variable, temporal_index, self.manipulative_variables,
-            )
-            # True
-            assign_blanket(
-                self.true_initial_sem,
-                self.true_sem,
-                self.assigned_blanket,
-                self.optimal_intervention_sets[temporal_index],
-                self.optimal_intervention_levels[temporal_index][self.optimal_intervention_sets[temporal_index]][
-                    best_objective_fnc_value_idx
-                ],
-                target=target,
-                target_value=self.optimal_blanket[self.base_target_variable][temporal_index],
-                G=self.G,
-            )
-            check_blanket(
-                self.assigned_blanket, self.base_target_variable, temporal_index, self.manipulative_variables,
-            )
-
-            # Check optimization results for the current temporal index before moving on
-            self._check_optimization_results(temporal_index)
-
+            self._post_optimisation_assignments(target, temporal_index, True)

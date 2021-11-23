@@ -91,7 +91,7 @@ def sequential_sample_from_SEM_hat(
     if seed:
         np.random.seed(seed)
     # Notice that we call it 'sample' in singular since we only receive one sample of the whole graph
-    sample = OrderedDict([(k, np.zeros(timesteps)) for k in static_sem.keys()])
+    sample = OrderedDict([(k, np.zeros(timesteps)) for k in static_sem])
     if initial_values:
         assert sample.keys() == initial_values.keys()
 

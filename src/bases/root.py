@@ -17,6 +17,9 @@ from src.utils.sequential_intervention_functions import (
 )
 from src.utils.sequential_sampling import sequentially_sample_model
 from src.utils.utilities import (
+    assign_blanket,
+    assign_blanket_hat,
+    check_blanket,
     check_reshape_add_data,
     convert_to_dict_of_temporal_lists,
     create_intervention_exploration_domain,
@@ -217,10 +220,10 @@ class Root:
 
     def node_parents(self, node: str, temporal_index: int = None) -> tuple:
         #  Returns the parents of this node with optional filtering on the time-index.
-        if temporal_index:
-            return (*[v for v in self.node_pars[node] if v.split("_")[1] == str(temporal_index)],)
+        if temporal_index is not None:
+            return tuple(filter(lambda x: x.endswith(str(temporal_index)), self.G.predecessors(node)))
         else:
-            return tuple(self.node_pars[node])
+            return tuple(self.G.predecessors(node))
 
     def _get_sem_emit_obs(
         self, t: int, pa: tuple, t_index_data: int = None
@@ -498,4 +501,67 @@ class Root:
                             self.observational_samples[var][temporal_index] = set_observational_samples[var][
                                 temporal_index
                             ]
+
+    def _post_optimisation_assignments(self, target: tuple, t: int, DCBO: bool = False) -> None:
+
+        # Index of the best value of the objective function
+        best_objective_fnc_value_idx = self.outcome_values[t].index(eval(self.task)(self.outcome_values[t])) - 1
+
+        # 1) Best intervention for this temporal index
+        for es in self.exploration_sets:
+            if isinstance(self.optimal_intervention_levels[t][es][best_objective_fnc_value_idx], ndarray,):
+                # Check to see that the optimal intervention is not None
+                check_val = self.optimal_intervention_levels[t][es][best_objective_fnc_value_idx]
+
+                assert check_val is not None, (
+                    t,
+                    self.optimal_intervention_sets[t],
+                    best_objective_fnc_value_idx,
+                    es,
+                )
+                # This is the, overall, best intervention set for this temporal index.
+                self.optimal_intervention_sets[t] = es
+                break  # There is only one so we can break here
+
+        # 2) Blanket stores optimal values (interventions and targets) found during DCBO.
+        self.optimal_blanket[self.base_target_variable][t] = eval(self.task)(self.outcome_values[t])
+
+        # 3) Write optimal interventions to the optimal blanket
+        for i, es_member in enumerate(set(es).intersection(self.manipulative_variables)):
+            self.optimal_blanket[es_member][t] = float(
+                self.optimal_intervention_levels[t][self.optimal_intervention_sets[t]][best_objective_fnc_value_idx][
+                    :, i
+                ]
+            )
+
+        if DCBO:
+            # 4) Finally, populate the summary blanket with info found in (1) to (3)
+            assign_blanket_hat(
+                self.assigned_blanket_hat,
+                self.optimal_intervention_sets[t],  # Exploration set
+                self.optimal_intervention_levels[t][self.optimal_intervention_sets[t]][
+                    best_objective_fnc_value_idx
+                ],  # Intervention level
+                target=target,
+                target_value=self.optimal_blanket[self.base_target_variable][t],
+            )
+            check_blanket(self.assigned_blanket_hat, self.base_target_variable, t, self.manipulative_variables)
+
+        # 4) Finally, populate the summary blanket with info found in (1) to (3)
+        assign_blanket(
+            self.true_initial_sem,
+            self.true_sem,
+            self.assigned_blanket,
+            self.optimal_intervention_sets[t],
+            self.optimal_intervention_levels[t][self.optimal_intervention_sets[t]][best_objective_fnc_value_idx],
+            target=target,
+            target_value=self.optimal_blanket[self.base_target_variable][t],
+            G=self.G,
+        )
+        check_blanket(
+            self.assigned_blanket, self.base_target_variable, t, self.manipulative_variables,
+        )
+
+        # Check optimization results for the current temporal index before moving on
+        self._check_optimization_results(t)
 

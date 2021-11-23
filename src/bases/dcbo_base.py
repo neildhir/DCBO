@@ -11,7 +11,6 @@ from src.utils.gp_utils import fit_gp, sequential_sample_from_SEM_hat
 from src.utils.sem_utils.emissions import fit_sem_emit_fncs
 from src.utils.sem_utils.transitions import fit_sem_trans_fncs
 from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
-from src.utils.utilities import make_column_shape_2D
 
 from .root import Root
 
@@ -367,4 +366,5 @@ class BaseClassDCBO(Root):
                 assigned_blanket = self.assigned_blanket_hat
         else:
             assigned_blanket = self.assigned_blanket_hat
+
         return assigned_blanket

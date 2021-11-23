@@ -51,7 +51,7 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
         @staticmethod
         def _make_trans_fnc(moment: int) -> Callable:
             #  Only transition between time-slices (only valid for first-order Markov assumption)
-            return lambda t, transfer_input_vars, _, sample: transition_fncs[transfer_input_vars].predict(
+            return lambda t, transfer_input_vars, _, sample: transition_fncs[t][transfer_input_vars].predict(
                 select_sample(sample, transfer_input_vars, t - 1)
             )[moment]
 
@@ -59,7 +59,7 @@ def build_sem_hat(G: MultiDiGraph, emission_fncs: dict, transition_fncs: dict = 
         def _make_emit_plus_trans_fnc(moment: int) -> Callable:
             #  Transition plus within-slice emission(s)
             return (
-                lambda t, transfer_input_vars, emit_input_vars, sample: transition_fncs[transfer_input_vars].predict(
+                lambda t, transfer_input_vars, emit_input_vars, sample: transition_fncs[t][transfer_input_vars].predict(
                     select_sample(sample, transfer_input_vars, t - 1)
                 )[moment]
                 + emission_fncs[t][emit_input_vars].predict(select_sample(sample, emit_input_vars, t))[moment]

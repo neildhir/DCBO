@@ -4,13 +4,10 @@ from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
 from numpy import arange, asarray, hstack, random, repeat, squeeze
 from numpy.core import vstack
-from numpy.core.multiarray import ndarray
 from src.bases.root import Root
 from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
 from src.utils.utilities import (
-    assign_blanket,
-    check_blanket,
     convert_to_dict_of_temporal_lists,
     make_column_shape_2D,
     standard_mean_function,
@@ -156,61 +153,7 @@ class ABO(Root):
                 self._update_bo_model(temporal_index, best_es)
 
             # Post optimisation assignments (post this time-index that is)
-            # Index of the best value of the objective function
-            best_objective_fnc_value_idx = (
-                self.outcome_values[temporal_index].index(eval(self.task)(self.outcome_values[temporal_index])) - 1
-            )
-
-            # 1) Best intervention for this temporal index
-            for es in self.exploration_sets:
-
-                if isinstance(
-                    self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx], ndarray,
-                ):
-                    # Check to see that the optimal intervention is not None
-                    check_val = self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx]
-
-                    assert check_val is not None, (
-                        temporal_index,
-                        self.optimal_intervention_sets[temporal_index],
-                        best_objective_fnc_value_idx,
-                        es,
-                    )
-                    # This is the, overall, best intervention set for this temporal index.
-                    self.optimal_intervention_sets[temporal_index] = es
-                    break  # There is only one so we can break here
-
-            # 2) Blanket stores optimal values (interventions and targets) found during DCBO.
-            self.optimal_blanket[self.base_target_variable][temporal_index] = eval(self.task)(
-                self.outcome_values[temporal_index]
-            )
-            # 3) Write optimal interventions to the optimal blanket
-            for i, es_member in enumerate(set(es).intersection(self.manipulative_variables)):
-                self.optimal_blanket[es_member][temporal_index] = float(
-                    self.optimal_intervention_levels[temporal_index][self.optimal_intervention_sets[temporal_index]][
-                        best_objective_fnc_value_idx
-                    ][:, i]
-                )
-
-            # 4) Finally, populate the summary blanket with info found in (1) to (3)
-            assign_blanket(
-                self.true_initial_sem,
-                self.true_sem,
-                self.assigned_blanket,
-                self.optimal_intervention_sets[temporal_index],
-                self.optimal_intervention_levels[temporal_index][self.optimal_intervention_sets[temporal_index]][
-                    best_objective_fnc_value_idx
-                ],
-                target=target,
-                target_value=self.optimal_blanket[self.base_target_variable][temporal_index],
-                node_children=None,
-            )
-            check_blanket(
-                self.assigned_blanket, self.base_target_variable, temporal_index, self.manipulative_variables,
-            )
-
-            # Check optimization results for the current temporal index before moving on
-            self._check_optimization_results(temporal_index)
+            self._post_optimisation_assignments(target, temporal_index)
 
     def _get_assigned_blanket(self, temporal_index):
         if temporal_index > 0:

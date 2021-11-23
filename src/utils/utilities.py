@@ -356,28 +356,6 @@ def select_sample(sample, input_variables, outside_time):
         return hstack(samp)
 
 
-def update_emission_pairs_keys(T: int, node_parents: dict, emission_pairs: dict) -> dict:
-    """
-    Sometimes the input and output pair order does not match because of NetworkX internal issues, so we need adjust the keys so that they do match.
-    """
-    for t in range(T):
-        nodes = [v for v in node_parents.keys() if v.split("_")[1] == str(t)]
-        for node in nodes:
-            if len(node_parents[node]) > 1:
-                #  Get only parents from this time-slice
-                parents = (*[v for v in node_parents[node] if v.split("_")[1] == str(t)],)
-                # Check if parents live in the emission pair dictionary
-                if not parents in emission_pairs.keys():
-                    #  Check if reverse tuple live in the emission pair dictionary
-                    if tuple(reversed(parents)) in emission_pairs.keys():
-                        # Remove the wrong key and replace it with correct one
-                        emission_pairs[parents] = emission_pairs.pop(tuple(reversed(parents)))
-                    else:
-                        raise ValueError("This key is erroneous.", parents, tuple(reversed(parents)))
-
-    return emission_pairs
-
-
 def powerset(iterable):
     # this returns e.g. powerset([1,2,3]) --> (1,) (2,) (3,) (1,2) (1,3) (2,3) (1,2,3)
     s = list(iterable)
