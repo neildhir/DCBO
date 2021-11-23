@@ -1,6 +1,3 @@
-"""
-Main BO class.
-"""
 from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
 from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF

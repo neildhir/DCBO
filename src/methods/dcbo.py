@@ -1,11 +1,6 @@
 from typing import Callable
-from numpy import squeeze
 from src.bases.dcbo_base import BaseClassDCBO
-from src.bayes_opt.cost_functions import total_intervention_cost
-from src.utils.utilities import (
-    convert_to_dict_of_temporal_lists,
-    make_column_shape_2D,
-)
+from src.utils.utilities import convert_to_dict_of_temporal_lists
 from tqdm import trange
 
 
