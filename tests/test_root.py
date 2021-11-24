@@ -12,7 +12,7 @@ from src.utils.utilities import convert_to_dict_of_temporal_lists, powerset
 seed(seed=0)
 
 
-class TestRootClass(unittest.TestCase):
+class TestRoot(unittest.TestCase):
     #  Do NOT change the setUp method -- setUp is reserved by unittest.
     def setUp(self):
         #  Use STAT DAG to test Root class
