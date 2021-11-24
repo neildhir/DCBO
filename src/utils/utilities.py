@@ -130,9 +130,9 @@ def get_shuffled_dict_sample_subsets(samples, nr_interventions):
     return new
 
 
-def initialise_DCBO_parameters_and_objects_filtering(
+def initialise_interventional_objects(
     exploration_sets: list,
-    interventional_data: dict,
+    D_I: dict,  # Interventional data
     base_target: str,
     total_timesteps: int,
     task="min",
@@ -140,7 +140,7 @@ def initialise_DCBO_parameters_and_objects_filtering(
     nr_interventions: int = None,
 ) -> Tuple[list, list, list, dict, dict]:
 
-    assert isinstance(interventional_data, dict)
+    assert isinstance(D_I, dict)
     target_values = {t: {es: None for es in exploration_sets} for t in range(total_timesteps)}
     interventions = deepcopy(target_values)
 
@@ -148,19 +148,14 @@ def initialise_DCBO_parameters_and_objects_filtering(
     intervention_data_Y = deepcopy(target_values)
     temporal_index = 0
     for es in exploration_sets:
-
-        if es not in interventional_data.keys():
-
+        if es not in D_I:
             pass
-
         else:
+            # Interventional data contains a dictionary of dictionaries, each corresponding to one type (es) of intervention.
+            interventional_samples = D_I[es]  # es on keys and nd.array on values
 
-            # Interventional data contains a dictionary of dictionaries,
-            # each corresponding to one type (es) of intervention.
-            interventional_samples = interventional_data[es]  # es on keys and nd.array on values
-
-            assert isinstance(interventional_samples, dict)
-            assert base_target in interventional_samples.keys()
+            assert isinstance(interventional_samples, dict), (es, type(interventional_samples), D_I)
+            assert base_target in interventional_samples
             assert isinstance(interventional_samples[base_target], np.ndarray)
 
             # This option exist _if_ we have more than one intervention per es
@@ -199,6 +194,7 @@ def initialise_DCBO_parameters_and_objects_filtering(
             assert intervention_data_Y[temporal_index][es] is not None
 
     # Get best intervention set at each time index
+    print(target_values)
     best_es = eval(task)(target_values[temporal_index], key=target_values[temporal_index].get)
 
     # Interventions
@@ -206,7 +202,6 @@ def initialise_DCBO_parameters_and_objects_filtering(
     # Outcomes
     best_target_value = target_values[temporal_index][best_es]
 
-    # PRIORS
     # Use the best outcome level at t=0 as a prior for all the other timesteps
     best_es_sequence = total_timesteps * [None]
     best_es_sequence[0] = best_es

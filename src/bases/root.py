@@ -24,7 +24,7 @@ from src.utils.utilities import (
     check_reshape_add_data,
     convert_to_dict_of_temporal_lists,
     create_intervention_exploration_domain,
-    initialise_DCBO_parameters_and_objects_filtering,
+    initialise_interventional_objects,
     initialise_global_outcome_dict_new,
     initialise_optimal_intervention_level_list,
     make_column_shape_2D,
@@ -159,7 +159,7 @@ class Root:
                 initial_optimal_sequential_intervention_levels,
                 self.interventional_data_x,
                 self.interventional_data_y,
-            ) = initialise_DCBO_parameters_and_objects_filtering(
+            ) = initialise_interventional_objects(
                 self.exploration_sets,
                 intervention_samples,
                 self.base_target_variable,

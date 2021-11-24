@@ -1,14 +1,13 @@
 import unittest
-
-import sys
-
-sys.path.append("src/")
+from numpy import arange, linspace
 
 from numpy.random import seed
 from src.bases.root import Root
 from src.examples.example_setups import setup_stat_scm
 from src.utils.sem_utils.toy_sems import StationaryDependentSEM as StatSEM
+from src.utils.sequential_intervention_functions import get_interventional_grids
 from src.utils.sequential_sampling import sequentially_sample_model
+from src.utils.utilities import convert_to_dict_of_temporal_lists, powerset
 
 seed(seed=0)
 
@@ -71,6 +70,51 @@ class TestRootClass(unittest.TestCase):
             self.root.sorted_nodes,
             {"X_0": 0, "Z_0": 1, "X_1": 2, "Y_0": 3, "Z_1": 4, "X_2": 5, "Y_1": 6, "Z_2": 7, "Y_2": 8},
         )
+        self.assertEqual(self.root.interventional_variable_limits, {"X": [-4, 1], "Z": [-3, 3]})
+        #  If we do not pass any exploration set, then by default the Root class will assign all manipulative variables as the intervention set.
+        self.assertEqual(self.root.exploration_sets, [("X", "Z")])
+        self.assertEqual(
+            self.root.interventional_data_y, {0: {("X", "Z"): None}, 1: {("X", "Z"): None}, 2: {("X", "Z"): None}}
+        )
+        self.assertEqual(
+            self.root.interventional_data_x, {0: {("X", "Z"): None}, 1: {("X", "Z"): None}, 2: {("X", "Z"): None}}
+        )
+
+    def test_dict_to_list_conversion_of_observational_samples(self):
+        observational_samples = {
+            "X": arange(0, 9).reshape(3, -1),
+            "Y": arange(3, 12).reshape(3, -1),
+            "Z": arange(6, 15).reshape(3, -1),
+        }
+        out = convert_to_dict_of_temporal_lists(observational_samples)
+        self.assertEqual(len(out["X"]), 3)
+        self.assertEqual(len(out["Z"][0]), 3)
+        self.assertEqual(sum([len(out["Y"][t]) for t in range(3)]), 9)
+
+    def test_interventional_grids(self):
+        nr_samples = 10
+        interventional_variable_limits = {"X": [-15, 3], "Z": [-1, 10]}
+        exploration_sets = list(powerset(self.root.manipulative_variables))
+        grids = get_interventional_grids(exploration_sets, interventional_variable_limits, nr_samples)
+        compare_vector = linspace(
+            interventional_variable_limits["X"][0], interventional_variable_limits["X"][1], num=nr_samples
+        ).reshape(-1, 1)
+        self.assertEqual(compare_vector.shape, grids[exploration_sets[0]].shape)
+        self.assertTrue((compare_vector == grids[exploration_sets[0]]).all())
+
+    def test_target_variables(self):
+        self.assertEqual(self.root.all_target_variables, ["Y_0", "Y_1", "Y_2"])
+
+    def test_canonical_variables(self):
+        self.assertEqual(self.root.observational_samples.keys(), {"X", "Y", "Z"})
+
+    def test_number_of_nodes_per_time_slice(self):
+        # Number of nodes per time-slice
+        v_n = len(self.root.G.nodes()) / self.root.G.T
+        nodes = list(self.root.G.nodes())
+        self.assertEqual(v_n, 3)
+        for t in range(self.G.T):
+            self.assertEquak(len([v for v in nodes if v.split("_")[1] == str(t)]), v_n)
 
 
 if __name__ == "__main__":
