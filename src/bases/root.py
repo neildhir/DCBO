@@ -76,7 +76,7 @@ class Root:
         self.T = int(list(G.nodes())[-1].split("_")[-1]) + 1  # Total time-steps in DAG
         G.T = self.T
         self.G = G
-        self.sorted_nodes = [v for v in topological_sort(G)]
+        self.sorted_nodes = {val: ix for ix, val in enumerate(topological_sort(G))}
         self.debug_mode = debug_mode
         # Number of optimization restart for GPs
         self.n_restart = n_restart
@@ -241,7 +241,7 @@ class Root:
             return tuple(
                 sorted(
                     filter(lambda x: x.endswith(str(temporal_index)), self.G.predecessors(node)),
-                    key=self.sorted_nodes.index,
+                    key=self.sorted_nodes.get,
                 )
             )
         else:

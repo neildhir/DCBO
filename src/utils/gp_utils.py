@@ -194,23 +194,3 @@ def fit_gp(
     model.optimize_restarts(n_restart, verbose=False, robust=True)
     return model
 
-
-def fit_causal_gp(mean_function, variance_function, X, Y):
-    input_dim = X.shape[1]
-    # Specify mean function
-    mf = Mapping(input_dim, 1)
-    mf.f = mean_function
-    mf.update_gradients = lambda a, b: None
-
-    kernel = CausalRBF(
-        input_dim=input_dim, variance_adjustment=variance_function, lengthscale=1.0, variance=1.0, ARD=False,
-    )
-
-    model = GPRegression(X=X, Y=Y, kernel=kernel, noise_var=1e-10, mean_function=mf)
-    gamma = priors.Gamma(a=3, b=0.5)  # See https://github.com/SheffieldML/GPy/issues/735
-
-    model.kern.variance.set_prior(gamma)
-
-    model.optimize()
-
-    return model
