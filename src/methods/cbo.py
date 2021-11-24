@@ -1,25 +1,17 @@
-"""
-Main CBO class.
-"""
 from typing import Callable
+
 import numpy as np
 from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
 from GPy.core import Mapping
 from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
-from numpy import squeeze
-from numpy.core.multiarray import ndarray
 from src.bases.root import Root
 from src.bayes_opt.causal_kernels import CausalRBF
-from src.bayes_opt.cost_functions import total_intervention_cost
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.gp_utils import fit_gp
+from src.utils.sem_utils.emissions import fit_sem_emit_fncs
 from src.utils.utilities import (
-    assign_blanket,
-    check_blanket,
     convert_to_dict_of_temporal_lists,
-    make_column_shape_2D,
     standard_mean_function,
     zero_variance_adjustment,
 )
@@ -90,23 +82,18 @@ class CBO(Root):
         self.seed = seed
         self.sample_anchor_points = sample_anchor_points
         self.seed_anchor_points = seed_anchor_points
-        # Convert observational samples to dict of temporal lists.
-        # We do this because at each time-index we may have a different number of samples.
-        # Because of this, samples need to be stored one lists per time-step.
+        # Fit Gaussian processes to emissions
+        self.sem_emit_fncs = fit_sem_emit_fncs(self.G, self.observational_samples)
+        # Convert observational samples to dict of temporal lists. We do this because at each time-index we may have a different number of samples. Because of this, samples need to be stored one lists per time-step.
         self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
 
-    def run_optimization(self):
+    def run(self):
 
         if self.debug_mode:
             assert self.ground_truth is not None, "Provide ground truth to plot surrogate models"
 
         # Walk through the graph, from left to right, i.e. the temporal dimension
         for temporal_index in trange(self.T, desc="Time index"):
-
-            if self.debug_mode:
-                print("\n\t\t\t\t###########################")
-                print("\t\t\t\t# Time: {}".format(temporal_index))
-                print("\t\t\t\t###########################\n")
 
             # Evaluate each target
             target = self.all_target_variables[temporal_index]
@@ -119,6 +106,7 @@ class CBO(Root):
             self._update_observational_data(temporal_index=temporal_index)
             self._update_interventional_data(temporal_index=temporal_index)
 
+            #  Online run option
             if temporal_index > 0 and (self.online or isinstance(self.n_obs_t, list)):
                 self._update_sem_emit_fncs(temporal_index)
 
@@ -127,27 +115,10 @@ class CBO(Root):
 
             for it in range(self.number_of_trials):
 
-                if self.debug_mode:
-                    print("\n\n>>>")
-                    print("Iteration:", it)
-                    print("<<<\n\n")
-
                 if it == 0:
-                    # >>>OBSERVE<<<
 
                     self.trial_type[temporal_index].append("o")  # For 'o'bserve
-
-                    if self.estimate_sem:
-                        # Check which current target we are dealing with
-                        _, target_temporal_index = target.split("_")
-                        assert int(target_temporal_index) == temporal_index
-                        sem_hat = self.make_sem_hat(
-                            summary_graph_node_parents=self.summary_graph_node_parents,
-                            independent_causes=self.independent_causes,
-                            emission_functions=self.sem_emit_fncs,
-                        )
-                    else:
-                        sem_hat = None
+                    sem_hat = self.make_sem_hat(G=self.G, emission_fncs=self.sem_emit_fncs,)
 
                     # Create mean functions and var functions given the observational data. This updates the prior.
                     self._update_sufficient_statistics(
@@ -161,10 +132,6 @@ class CBO(Root):
                     self._update_opt_params(it, temporal_index, best_es)
 
                 else:
-                    # >>>INTERVENE<<<
-
-                    # Presently find the optimal value of Y_t
-                    current_best_global_target = eval(self.task)(self.outcome_values[temporal_index])
 
                     # Surrogate models
                     if self.trial_type[temporal_index][-1] == "o":
@@ -174,126 +141,12 @@ class CBO(Root):
                                 and self.interventional_data_y[temporal_index][es] is not None
                             ):
                                 self._update_bo_model(temporal_index, es)
-                    if self.debug_mode:
-                        self._plot_surrogate_model(temporal_index)
-                    self.trial_type[temporal_index].append("i")  # For 'i'ntervene
 
-                    # Compute acquisition function
-                    self._evaluate_acquisition_functions(temporal_index, current_best_global_target, it)
-
-                    # Best exploration set based on acquired target-values
-                    best_es = eval("max")(self.y_acquired, key=self.y_acquired.get)
-                    new_interventional_data_x = self.corresponding_x[best_es]
-                    self._check_new_point(best_es, temporal_index)
-
-                    # Compute target value for selected intervention
-                    y_new = self.target_functions[temporal_index][best_es](
-                        current_target=target,
-                        intervention_levels=squeeze(new_interventional_data_x),
-                        assigned_blanket=assigned_blanket,
-                    )
-
-                    if self.debug_mode:
-                        print("Selected set:", best_es)
-                        print("Intervention value:", new_interventional_data_x)
-                        print("Outcome:", y_new)
-
-                    # Update interventional data
-                    self._get_updated_interventional_data(new_interventional_data_x, y_new, best_es, temporal_index)
-
-                    # Evaluate cost of intervention
-                    self.per_trial_cost[temporal_index].append(
-                        total_intervention_cost(
-                            best_es, self.cost_functions, self.interventional_data_x[temporal_index][best_es],
-                        )
-                    )
-
-                    # Store local optimal exploration set corresponding intervention levels
-                    self.outcome_values[temporal_index].append(y_new)
-                    self.optimal_outcome_values_during_trials[temporal_index].append(
-                        eval(self.task)(y_new, current_best_global_target)
-                    )
-
-                    # Store the intervention
-                    if len(new_interventional_data_x.shape) != 2:
-                        self.optimal_intervention_levels[temporal_index][best_es][it] = make_column_shape_2D(
-                            new_interventional_data_x
-                        )
-                    else:
-                        self.optimal_intervention_levels[temporal_index][best_es][it] = new_interventional_data_x
-
-                    # Store the currently best intervention set
-                    self.sequence_of_interventions_during_trials[temporal_index].append(best_es)
-
-                    # Create BO model if it does not exist
-                    self._update_bo_model(temporal_index, best_es)
-
-                    if self.debug_mode:
-                        print("########################### results of optimization ##################")
-                        self._plot_surrogate_model(temporal_index)
-
-                    if self.debug_mode:
-                        print(
-                            "### Optimized model: ###", best_es, self.bo_model[temporal_index][best_es].model,
-                        )
+                    # This function runs the actual computation -- calls are identical for all methods
+                    self._per_trial_computations(temporal_index, it, target, assigned_blanket)
 
             # Post optimisation assignments (post this time-index that is)
-            # Index of the best value of the objective function
-            best_objective_fnc_value_idx = (
-                self.outcome_values[temporal_index].index(eval(self.task)(self.outcome_values[temporal_index])) - 1
-            )
-
-            # 1) Best intervention for this temporal index
-            for es in self.exploration_sets:
-
-                if isinstance(
-                    self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx], ndarray,
-                ):
-                    # Check to see that the optimal intervention is not None
-                    check_val = self.optimal_intervention_levels[temporal_index][es][best_objective_fnc_value_idx]
-
-                    assert check_val is not None, (
-                        temporal_index,
-                        self.optimal_intervention_sets[temporal_index],
-                        best_objective_fnc_value_idx,
-                        es,
-                    )
-                    # This is the, overall, best intervention set for this temporal index.
-                    self.optimal_intervention_sets[temporal_index] = es
-                    break  # There is only one so we can break here
-
-            # 2) Blanket stores optimal values (interventions and targets) found during DCBO.
-            self.optimal_blanket[self.base_target_variable][temporal_index] = eval(self.task)(
-                self.outcome_values[temporal_index]
-            )
-
-            # 3) Write optimal interventions to the optimal blanket
-            for i, es_member in enumerate(set(es).intersection(self.manipulative_variables)):
-                self.optimal_blanket[es_member][temporal_index] = float(
-                    self.optimal_intervention_levels[temporal_index][self.optimal_intervention_sets[temporal_index]][
-                        best_objective_fnc_value_idx
-                    ][:, i]
-                )
-
-            # 4) Finally, populate the summary blanket with info found in (1) to (3)
-            assign_blanket(
-                self.true_initial_sem,
-                self.true_sem,
-                self.assigned_blanket,
-                self.optimal_intervention_sets[temporal_index],
-                self.optimal_intervention_levels[temporal_index][self.optimal_intervention_sets[temporal_index]][
-                    best_objective_fnc_value_idx
-                ],
-                target=target,
-                target_value=self.optimal_blanket[self.base_target_variable][temporal_index],
-                node_children=self.node_children,
-            )
-            check_blanket(
-                self.assigned_blanket, self.base_target_variable, temporal_index, self.manipulative_variables,
-            )
-
-            # Check optimization results for the current temporal index before moving on
-            self._check_optimization_results(temporal_index)
+            self._post_optimisation_assignments(target, temporal_index)
 
     def _evaluate_acquisition_functions(self, temporal_index, current_best_global_target, it):
 
@@ -341,46 +194,16 @@ class CBO(Root):
                 self.interventional_data_x[temporal_index][var] = self.interventional_data_x[temporal_index - 1][var]
                 self.interventional_data_y[temporal_index][var] = self.interventional_data_y[temporal_index - 1][var]
 
-    def _update_sem_emit_fncs(self, temporal_index: int) -> None:
+    def _update_sem_emit_fncs(self, t: int) -> None:
 
-        for inputs in self.sem_emit_fncs[temporal_index].keys():
-            output = self.emission_pairs[inputs].split("_")[0]
-            if len(inputs) > 1:
-                xx = []
-                for node in inputs:
-                    start_node, time = node.split("_")
-                    time = int(time)
-                    #  Input
-                    x = make_column_shape_2D(self.observational_samples[start_node][time])
-                    xx.append(x)
-                xx = np.hstack(xx)
-                #  Output
-                yy = make_column_shape_2D(self.observational_samples[output][time])
-            elif len(inputs) == 1:
-                start_node, time = inputs[0].split("_")
-                time = int(time)
-                #  Input
-                xx = make_column_shape_2D(self.observational_samples[start_node][time])
-                #  Output
-                yy = make_column_shape_2D(self.observational_samples[output][time])
-            else:
-                raise ValueError("The length of the tuple is: {}".format(len(inputs)))
-
-            assert len(xx.shape) == 2
-            assert len(yy.shape) == 2
-            assert xx.shape[0] == yy.shape[0]  # Column arrays
-
-            if xx.shape[0] != yy.shape[0]:
-                min_rows = np.min((xx.shape[0], yy.shape[0]))
-                xx = xx[: int(min_rows)]
-                yy = yy[: int(min_rows)]
-
-            if not self.sem_emit_fncs[temporal_index][inputs]:
-                self.sem_emit_fncs[temporal_index][inputs] = fit_gp(x=xx, y=yy)
-            else:
+        # Loop over all emission functions in this time-slice
+        for pa in self.sem_emit_fncs[t]:
+            # Get relevant data for updating emission functions
+            xx, yy = self._get_sem_emit_obs(t, pa)
+            if xx and yy:
                 # Update in-place
-                self.sem_emit_fncs[temporal_index][inputs].set_XY(X=xx, Y=yy)
-                self.sem_emit_fncs[temporal_index][inputs].optimize()
+                self.sem_emit_fncs[t][pa].set_XY(X=xx, Y=yy)
+                self.sem_emit_fncs[t][pa].optimize()
 
     def _update_bo_model(
         self, temporal_index: int, exploration_set: tuple, alpha: float = 2, beta: float = 0.5,
@@ -427,11 +250,8 @@ class CBO(Root):
             gamma = priors.Gamma(a=alpha, b=beta)  # See https://github.com/SheffieldML/GPy/issues/735
             model.kern.variance.set_prior(gamma)
 
-        # Store model
         model.likelihood.variance.fix()
-
         old_seed = np.random.get_state()
-
         np.random.seed(self.seed)
         model.optimize()
         np.random.set_state(old_seed)
@@ -447,4 +267,5 @@ class CBO(Root):
                 assigned_blanket = self.assigned_blanket
         else:
             assigned_blanket = self.assigned_blanket
+
         return assigned_blanket

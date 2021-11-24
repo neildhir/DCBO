@@ -1,96 +1,98 @@
 from copy import deepcopy
-from itertools import combinations
-from typing import Dict, Tuple
+
 from networkx import MultiDiGraph
-from numpy.core import hstack
+from numpy import array, hstack, where
+from sklearn.neighbors import KernelDensity
+from src.utils.dag_utils.adjacency_matrix_utils import get_emit_and_trans_adjacency_mats
 
 from ..gp_utils import fit_gp
-from ..utilities import update_emission_pairs_keys
 
 
-def fit_sem_emit_fncs(observational_samples: dict, emission_pairs: dict) -> dict:
+def fit_sem_emit_fncs(G: MultiDiGraph, D_obs: dict) -> dict:
+    """
+    Fit within time-slice estimated SEM.
 
-    #  This is an ordered list
-    timesteps = observational_samples[list(observational_samples.keys())[0]].shape[1]
-    emit_fncs = {t: {key: None for key in emission_pairs.keys()} for t in range(timesteps)}
+    Parameters
+    ----------
+    G : MultiDiGraph
+        Causal DAG
+    D_obs : dict
+        Observational samples from the true system
 
-    for input_nodes in emission_pairs.keys():
-        target_variable = emission_pairs[input_nodes].split("_")[0]
-        if len(input_nodes) > 1:
-            xx = []
-            for node in input_nodes:
-                start_node, time = node.split("_")
-                time = int(time)
-                #  Input
-                x = observational_samples[start_node][:, time].reshape(-1, 1)
-                xx.append(x)
-            xx = hstack(xx)
-            #  Output
-            yy = observational_samples[target_variable][:, time].reshape(-1, 1)
-        elif len(input_nodes) == 1:
-            start_node, time = input_nodes[0].split("_")
-            time = int(time)
-            #  Input
-            xx = observational_samples[start_node][:, time].reshape(-1, 1)
-            #  Output
-            yy = observational_samples[target_variable][:, time].reshape(-1, 1)
-        else:
-            raise ValueError("The length of the tuple is: {}".format(len(input_nodes)))
+    Returns
+    -------
+    dict
+        Dictionary containing the estimated SEM functions
+    """
 
-        assert len(xx.shape) == 2
-        assert len(yy.shape) == 2
-        if input_nodes in emit_fncs[time]:
-            emit_fncs[time][input_nodes] = fit_gp(x=xx, y=yy)
-        else:
-            raise ValueError(input_nodes)
+    # Emission adjacency matrix (doesn't contain entries for transition edges)
+    emit_adj_mat, _ = get_emit_and_trans_adjacency_mats(G)
+    #  Binary matrix which keeps track of which edges have been fitted
+    edge_fit_mat = deepcopy(emit_adj_mat)
+    T = G.T
+    nodes = array(G.nodes())
+    fncs = {t: {} for t in range(T)}  # SEM functions
 
-    # To remove any None values
-    return {t: {k: v for k, v in emit_fncs[t].items() if v is not None} for t in range(timesteps)}
+    # Each node in this list is a parent to more than one child node i.e. Y <-- X --> Z
+    fork_idx = where(emit_adj_mat.sum(axis=1) > 1)[0]
+    fork_nodes = nodes[fork_idx]
 
+    if any(fork_nodes):
+        for i, v in zip(fork_idx, fork_nodes):
+            #  Get children / independents
+            coords = where(emit_adj_mat[i, :] == 1)[0]
+            ch = nodes[coords].tolist()  # Gets variables names
+            var, t = v.split("_")
+            t = int(t)
+            xx = D_obs[var][:, t].reshape(-1, 1)  #  Independent regressor
+            for j, y in enumerate(ch):
+                # Estimand
+                var_y, _ = y.split("_")
+                yy = D_obs[var_y][:, t].reshape(-1, 1)
+                # Fit estimator
+                fncs[t][(v, j, y)] = fit_gp(x=xx, y=yy)
+                # Update edge tracking matrix (removes entry (i,j) if it has been fitted)
+                edge_fit_mat[i, coords[j]] -= 1
 
-def get_emissions_input_output_pairs(
-    T: int, G: MultiDiGraph
-) -> Tuple[Dict[str, tuple], Dict[str, tuple], Dict[str, tuple]]:
+    # Assign estimators to source nodes (these don't exist in edge_fit_mat)
+    for v in nodes[where(emit_adj_mat.sum(axis=0) == 0)]:
+        var, t = v.split("_")
+        t = int(t)
+        # This is a source node so we need to find the marginal from the observational data.
+        xx = D_obs[var][:, t].reshape(-1, 1)
+        # Fit estimator
+        fncs[t][(None, v)] = KernelDensity(kernel="gaussian").fit(xx)
 
-    node_children = {node: None for node in G.nodes}
-    node_parents = {node: None for node in G.nodes}
-    emission_pairs = {}
+    # Fit remaining un-estimated edges
+    for i, j in zip(*where(edge_fit_mat == 1)):
+        pa_y, t_pa = nodes[i].split("_")
+        y, t_y = nodes[j].split("_")
+        assert t_pa == t_y
+        t = int(t_y)
+        # Regressor/Independent
+        xx = D_obs[pa_y][:, t].reshape(-1, 1)
+        # Estimand
+        yy = D_obs[y][:, t].reshape(-1, 1)
+        #  Fit estimator
+        fncs[t][(nodes[i],)] = fit_gp(x=xx, y=yy)
+        # Update edge tracking matrix
+        edge_fit_mat[i, j] -= 1
 
-    # Children of all nodes
-    for node in G.nodes:
-        node_children[node] = list(G.successors(node))
+    #  The edge-tracking matrix should be zero at the end.
+    assert edge_fit_mat.sum() == 0
 
-    #  Parents of all nodes
-    for node in G.nodes:
-        node_parents[node] = tuple(G.predecessors(node))
+    # Finally, fit many-to-one function estimates (i.e. nodes with more than one parent) to account for multivariate intervention
+    many_to_one = where(emit_adj_mat.sum(axis=0) > 1)[0]
+    if any(many_to_one):
+        for i, v in zip(many_to_one, nodes[many_to_one]):
+            y, y_t = v.split("_")
+            t = int(y_t)
+            pa_y = nodes[where(emit_adj_mat[:, i] == 1)]
+            assert len(pa_y) > 1, (pa_y, y, many_to_one)
+            xx = hstack([D_obs[vv.split("_")[0]][:, t].reshape(-1, 1) for vv in pa_y])
+            # Estimand
+            yy = D_obs[y][:, t].reshape(-1, 1)
+            #  Fit estimator
+            fncs[t][tuple(pa_y)] = fit_gp(x=xx, y=yy)
 
-    emissions = {t: [] for t in range(T)}
-    for e in G.edges:
-        _, inn_time = e[0].split("_")
-        _, out_time = e[1].split("_")
-        # Emission edge
-        if out_time == inn_time:
-            emissions[int(out_time)].append((e[0], e[1]))
-
-    new_emissions = deepcopy(emissions)
-    emissions = emissions
-    for t in range(T):
-        for a, b in combinations(emissions[t], 2):
-            if a[1] == b[1]:
-                new_emissions[t].append(((a[0], b[0]), a[1]))
-                cond = [v for v in list(G.predecessors(b[0])) if v.split("_")[1] == str(t)]
-                if len(cond) != 0 and cond[0] == a[0]:
-                    # Remove from list
-                    new_emissions[t].remove(a)
-
-    for t in range(T):
-        for pair in new_emissions[t]:
-            if isinstance(pair[0], tuple):
-                emission_pairs[pair[0]] = pair[1]
-            else:
-                emission_pairs[(pair[0],)] = pair[1]
-
-    # Sometimes the input and output pair order does not match because of NetworkX internal issues, so we need adjust the keys so that they do match.
-    emission_pairs = update_emission_pairs_keys(T, node_parents, emission_pairs)
-
-    return node_children, node_parents, emission_pairs
+    return fncs

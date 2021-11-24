@@ -1,25 +1,58 @@
 from copy import deepcopy
+from typing import OrderedDict
 import numpy as np
+from typing import Tuple, Callable
 from GPy.core.mapping import Mapping
 from GPy.core.parameterization import priors
 from GPy.kern import RBF
 from GPy.models.gp_regression import GPRegression
 from ..bayes_opt.causal_kernels import CausalRBF
-from .sequential_causal_functions import sequential_sample_from_complex_model_hat, sequential_sample_from_model
+from .sequential_sampling import sequential_sample_from_SEM_hat, sequential_sample_from_true_SEM
 
 
 def update_sufficient_statistics_hat(
     temporal_index: int,
     target_variable: str,
     exploration_set: tuple,
-    sem_hat,
-    node_parents,
+    sem_hat: OrderedDict,
+    node_parents: Callable,
     dynamic: bool,
     assigned_blanket: dict,
     mean_dict_store: dict,
     var_dict_store: dict,
     seed: int = 1,
-):
+) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Updates the mean and variance functions (priors) on our causal effects given the current exploration set.
+
+    Parameters
+    ----------
+    temporal_index : int
+        The current time index in the causal Bayesian network.
+    target_variable : str
+        The current target variable e.g Y_1
+    exploration_set : tuple
+        The current exploration set
+    sem_hat : OrderedDict
+        Contains our estimated SEMs
+    node_parents : Callable
+        Function with returns parents of the passed argument at the given time-slice
+    dynamic : bool
+        Tells the method to use horizontal information or not
+    assigned_blanket : dict
+        The assigned blanket thus far (i.e. up until the temporal index)
+    mean_dict_store : dict
+        Stores the updated mean function for this time index and exploration set
+    var_dict_store : dict
+        Stores the updated variance function for this time index and exploration set
+    seed : int, optional
+        The random seet, by default 1
+
+    Returns
+    -------
+    Tuple
+        Returns the updated mean and variance function
+    """
 
     if dynamic:
         # This relies on the correct blanket being passed from outside this function.
@@ -28,9 +61,9 @@ def update_sufficient_statistics_hat(
         dynamic_sem_var = sem_hat().dynamic(moment=1)
     else:
         # static: no backward dependency on past targets or interventions
-        intervention_blanket = deepcopy(assigned_blanket)
-        # This is empty if passed correctly.
-        # This relies on the correct blanket being passed from outside this function.
+        intervention_blanket = deepcopy(
+            assigned_blanket
+        )  # This is empty if passed correctly. This relies on the correct blanket being passed from outside this function.
         assert [all(intervention_blanket[key] is None for key in intervention_blanket.keys())]
         dynamic_sem_mean = None  # CBO does not have horizontal information hence gets static model every time
         dynamic_sem_var = None  # CBO does not have horizontal information hence gets static model every time
@@ -51,25 +84,21 @@ def update_sufficient_statistics_hat(
     }
 
     def mean_function_internal(x_vals, mean_dict_store):
-        out = []
+        samples = []
         for x in x_vals:
-            # Check if it is already computed
-            if str(x) in mean_dict_store[temporal_index][exploration_set].keys():
-                out.append(mean_dict_store[temporal_index][exploration_set][str(x)])
+            # Check if it has already been computed
+            if str(x) in mean_dict_store[temporal_index][exploration_set]:
+                samples.append(mean_dict_store[temporal_index][exploration_set][str(x)])
             else:
                 # Otherwise compute it and store it
                 for intervention_variable, xx in zip(exploration_set, x):
                     intervention_blanket[intervention_variable][temporal_index] = xx
 
-                # TODO: parallelise all sampling functions, this is much too slow
-                sample = sequential_sample_from_complex_model_hat(
-                    interventions=intervention_blanket, **kwargs1, seed=seed
-                )
-                out.append(sample[target_variable][temporal_index])
-
+                # TODO: parallelise all sampling functions, this is much too slow [GPyTorch] -- see https://docs.gpytorch.ai/en/v1.5.0/examples/08_Advanced_Usage/Simple_Batch_Mode_GP_Regression.html#Setting-up-the-model
+                sample = sequential_sample_from_SEM_hat(interventions=intervention_blanket, **kwargs1, seed=seed)
+                samples.append(sample[target_variable][temporal_index])
                 mean_dict_store[temporal_index][exploration_set][str(x)] = sample[target_variable][temporal_index]
-
-        return np.vstack(out)
+        return np.vstack(samples)
 
     def mean_function(x_vals):
         return mean_function_internal(x_vals, mean_dict_store)
@@ -78,21 +107,16 @@ def update_sufficient_statistics_hat(
         out = []
         for x in x_vals:
             # Check if it is already computed
-            if str(x) in var_dict_store[temporal_index][exploration_set].keys():
+            if str(x) in var_dict_store[temporal_index][exploration_set]:
                 out.append(var_dict_store[temporal_index][exploration_set][str(x)])
             else:
                 # Otherwise compute it and store it
                 for intervention_variable, xx in zip(exploration_set, x):
                     intervention_blanket[intervention_variable][temporal_index] = xx
-
                 # TODO: parallelise all sampling functions, this is much too slow
-                sample = sequential_sample_from_complex_model_hat(
-                    interventions=intervention_blanket, **kwargs2, seed=seed
-                )
+                sample = sequential_sample_from_SEM_hat(interventions=intervention_blanket, **kwargs2, seed=seed)
                 out.append(sample[target_variable][temporal_index])
-
                 var_dict_store[temporal_index][exploration_set][str(x)] = sample[target_variable][temporal_index]
-
         return np.vstack(out)
 
     def variance_function(x_vals):
@@ -131,7 +155,7 @@ def update_sufficient_statistics(
             out = []
             for x in x_vals:
                 intervention_blanket[intervention_variable][temporal_index] = x
-                sample = sequential_sample_from_model(
+                sample = sequential_sample_from_true_SEM(
                     initial_sem, sem, temporal_index + 1, interventions=intervention_blanket,
                 )
                 out.append(sample[child_var][temporal_index])
@@ -147,7 +171,7 @@ def update_sufficient_statistics(
             for x in x_vals:
                 for i, inter_var in enumerate(exploration_set):
                     intervention_blanket[inter_var][temporal_index] = x[i]
-                    sample = sequential_sample_from_model(
+                    sample = sequential_sample_from_true_SEM(
                         initial_sem, sem, temporal_index + 1, interventions=intervention_blanket,
                     )
                     out.append(sample[child_var][temporal_index])
@@ -170,23 +194,3 @@ def fit_gp(
     model.optimize_restarts(n_restart, verbose=False, robust=True)
     return model
 
-
-def fit_causal_gp(mean_function, variance_function, X, Y):
-    input_dim = X.shape[1]
-    # Specify mean function
-    mf = Mapping(input_dim, 1)
-    mf.f = mean_function
-    mf.update_gradients = lambda a, b: None
-
-    kernel = CausalRBF(
-        input_dim=input_dim, variance_adjustment=variance_function, lengthscale=1.0, variance=1.0, ARD=False,
-    )
-
-    model = GPRegression(X=X, Y=Y, kernel=kernel, noise_var=1e-10, mean_function=mf)
-    gamma = priors.Gamma(a=3, b=0.5)  # See https://github.com/SheffieldML/GPy/issues/735
-
-    model.kern.variance.set_prior(gamma)
-
-    model.optimize()
-
-    return model

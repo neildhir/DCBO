@@ -58,4 +58,4 @@ You should have received a copy of the GNU General Public License along with thi
 
 ## Disclaimer
 
-This is research code. Written by researchers, for researchers. We are not professional software developers and are thus not equipped to make a (more) robust implementation. Consequently, things may break. If they do please do not be angry. Instead, if you would like to contribute, find things that are broken or have any suggestions for this work, you can contact us at ndhir@turing.ac.uk or open an issue on this repository.
+This is research code. Written by researchers, for researchers. We are not professional software developers and are thus not equipped to make a (more) robust implementation. Consequently, things may break. If they do please don't get angry. Instead, if you would like to contribute, find things that are broken or have any suggestions for this work, you can contact us at ndhir@turing.ac.uk or open an issue on this repository.

@@ -1,10 +1,11 @@
 from copy import deepcopy
 from itertools import chain, combinations
 from typing import Tuple
+from networkx.classes.multidigraph import MultiDiGraph
 import numpy as np
 from emukit.core import ContinuousParameter, ParameterSpace
 from numpy.core import hstack, vstack
-from .sequential_causal_functions import sequential_sample_from_model
+from .sequential_sampling import sequential_sample_from_true_SEM
 import matplotlib.pyplot as plt
 
 
@@ -129,9 +130,9 @@ def get_shuffled_dict_sample_subsets(samples, nr_interventions):
     return new
 
 
-def initialise_DCBO_parameters_and_objects_filtering(
+def initialise_interventional_objects(
     exploration_sets: list,
-    interventional_data: dict,
+    D_I: dict,  # Interventional data
     base_target: str,
     total_timesteps: int,
     task="min",
@@ -139,7 +140,7 @@ def initialise_DCBO_parameters_and_objects_filtering(
     nr_interventions: int = None,
 ) -> Tuple[list, list, list, dict, dict]:
 
-    assert isinstance(interventional_data, dict)
+    assert isinstance(D_I, dict)
     target_values = {t: {es: None for es in exploration_sets} for t in range(total_timesteps)}
     interventions = deepcopy(target_values)
 
@@ -147,19 +148,14 @@ def initialise_DCBO_parameters_and_objects_filtering(
     intervention_data_Y = deepcopy(target_values)
     temporal_index = 0
     for es in exploration_sets:
-
-        if es not in interventional_data.keys():
-
+        if es not in D_I:
             pass
-
         else:
+            # Interventional data contains a dictionary of dictionaries, each corresponding to one type (es) of intervention.
+            interventional_samples = D_I[es]  # es on keys and nd.array on values
 
-            # Interventional data contains a dictionary of dictionaries,
-            # each corresponding to one type (es) of intervention.
-            interventional_samples = interventional_data[es]  # es on keys and nd.array on values
-
-            assert isinstance(interventional_samples, dict)
-            assert base_target in interventional_samples.keys()
+            assert isinstance(interventional_samples, dict), (es, type(interventional_samples), D_I)
+            assert base_target in interventional_samples
             assert isinstance(interventional_samples[base_target], np.ndarray)
 
             # This option exist _if_ we have more than one intervention per es
@@ -198,6 +194,7 @@ def initialise_DCBO_parameters_and_objects_filtering(
             assert intervention_data_Y[temporal_index][es] is not None
 
     # Get best intervention set at each time index
+    print(target_values)
     best_es = eval(task)(target_values[temporal_index], key=target_values[temporal_index].get)
 
     # Interventions
@@ -205,7 +202,6 @@ def initialise_DCBO_parameters_and_objects_filtering(
     # Outcomes
     best_target_value = target_values[temporal_index][best_es]
 
-    # PRIORS
     # Use the best outcome level at t=0 as a prior for all the other timesteps
     best_es_sequence = total_timesteps * [None]
     best_es_sequence[0] = best_es
@@ -290,19 +286,19 @@ def assign_blanket_hat(
 
 
 def assign_blanket(
-    initial_sem: dict,  # OBS: true SEM
-    sem: dict,  #  OBS: true SEM
+    static_sem: dict,  # OBS: true SEM
+    dynamic_sem: dict,  #  OBS: true SEM
     blanket: dict,
     exploration_set: list,
-    intervention_level,
+    intervention_level: np.array,
     target: str,
-    target_value,
-    node_children: dict,
-):
+    target_value: float,
+    G: MultiDiGraph,
+) -> None:
 
     # Split current target
-    target_canonical_variable, temporal_index = target.split("_")
-    temporal_index = int(temporal_index)
+    target_var, temporal_index = target.split("_")
+    t = int(temporal_index)
     assert len(exploration_set) == intervention_level.shape[1], (
         exploration_set,
         intervention_level,
@@ -310,28 +306,29 @@ def assign_blanket(
     assert intervention_level is not None
 
     #  Assign target value
-    blanket[target_canonical_variable][temporal_index] = float(target_value)
+    blanket[target_var][t] = float(target_value)
 
     if len(exploration_set) == 1:
         # Intervention only happening on _one_ variable, assign it
         intervention_variable = exploration_set[0]
         # Intervention only happening on _one_ variable, assign it
-        blanket[intervention_variable][temporal_index] = float(intervention_level)
-        # The target and intervention value have already assigned
-        # so we check to see if anything else is missing in this time-slice
-        intervention_node = intervention_variable + "_" + str(temporal_index)
+        blanket[intervention_variable][t] = float(intervention_level)
+        # The target and intervention value have already assigned so we check to see if anything else is missing in this time-slice
+        intervention_node = intervention_variable + "_" + str(t)
         children = [
-            v.split("_")[0] for v in node_children[intervention_node] if v.split("_")[0] != target_canonical_variable
+            v.split("_")[0]
+            for v in G.successors(intervention_node)
+            if v.split("_")[0] != target_var and v.split("_")[1] == temporal_index
         ]
-        if len(children) != 0:
+        if children:
             for child in children:
-                if blanket[child][temporal_index] is None:  # Only valid when t > 0
+                if blanket[child][t] is None:  # Only valid when t > 0
                     # Value is None so we sample a value for this node
-                    sample = sequential_sample_from_model(initial_sem, sem, temporal_index + 1, interventions=blanket)
-                    blanket[child][temporal_index] = sample[child][temporal_index]
+                    sample = sequential_sample_from_true_SEM(static_sem, dynamic_sem, t + 1, interventions=blanket)
+                    blanket[child][t] = sample[child][t]
     else:
         for i, intervention_variable in enumerate(exploration_set):
-            blanket[intervention_variable][temporal_index] = float(intervention_level[:, i])
+            blanket[intervention_variable][t] = float(intervention_level[:, i])
 
 
 def check_blanket(blanket, base_target_variable, temporal_index, manipulative_variables):
@@ -352,28 +349,6 @@ def select_sample(sample, input_variables, outside_time):
             assert time == outside_time, (sample, input_variables, time, outside_time)
             samp.append(sample[var][time].reshape(-1, 1))
         return hstack(samp)
-
-
-def update_emission_pairs_keys(T: int, node_parents: dict, emission_pairs: dict) -> dict:
-    """
-    Sometimes the input and output pair order does not match because of NetworkX internal issues, so we need adjust the keys so that they do match.
-    """
-    for t in range(T):
-        nodes = [v for v in node_parents.keys() if v.split("_")[1] == str(t)]
-        for node in nodes:
-            if len(node_parents[node]) > 1:
-                #  Get only parents from this time-slice
-                parents = (*[v for v in node_parents[node] if v.split("_")[1] == str(t)],)
-                # Check if parents live in the emission pair dictionary
-                if not parents in emission_pairs.keys():
-                    #  Check if reverse tuple live in the emission pair dictionary
-                    if tuple(reversed(parents)) in emission_pairs.keys():
-                        # Remove the wrong key and replace it with correct one
-                        emission_pairs[parents] = emission_pairs.pop(tuple(reversed(parents)))
-                    else:
-                        raise ValueError("This key is erroneous.", parents, tuple(reversed(parents)))
-
-    return emission_pairs
 
 
 def powerset(iterable):
@@ -402,7 +377,7 @@ def calculate_best_intervention_and_effect(
         for xx in interventional_grids[es]:
             for intervention_variable, x in zip(es, xx):
                 this_blanket[intervention_variable][time] = x
-            out = sequential_sample_from_model(
+            out = sequential_sample_from_true_SEM(
                 static_sem=static_sem,
                 dynamic_sem=dynamic_sem,
                 timesteps=time + 1,
