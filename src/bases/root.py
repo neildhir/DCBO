@@ -1,6 +1,7 @@
 from copy import deepcopy
 from random import choice
 from typing import Callable, Tuple, Union
+from networkx.algorithms.dag import topological_sort
 
 import numpy as np
 from matplotlib import pyplot as plt
@@ -75,6 +76,7 @@ class Root:
         self.T = int(list(G.nodes())[-1].split("_")[-1]) + 1  # Total time-steps in DAG
         G.T = self.T
         self.G = G
+        self.sorted_nodes = [v for v in topological_sort(G)]
         self.debug_mode = debug_mode
         # Number of optimization restart for GPs
         self.n_restart = n_restart
@@ -219,9 +221,29 @@ class Root:
             self.assigned_blanket_hat = deepcopy(self.optimal_blanket)
 
     def node_parents(self, node: str, temporal_index: int = None) -> tuple:
-        #  Returns the parents of this node with optional filtering on the time-index.
+        """
+        Returns the parents of this node with optional filtering on the time-index.
+
+        Parameters
+        ----------
+        node : str
+            The node of interest
+        temporal_index : int, optional
+            Select from which time-slice we want nodes only, by default None
+
+        Returns
+        -------
+        tuple
+            Parents of the node, optionally filtered
+        """
         if temporal_index is not None:
-            return tuple(filter(lambda x: x.endswith(str(temporal_index)), self.G.predecessors(node)))
+            #  This return has to have this complex form because the fitted SEM functions expect multivariate inputs in a specific order (the topological order) of the nodes. Hence the additional sorting.
+            return tuple(
+                sorted(
+                    filter(lambda x: x.endswith(str(temporal_index)), self.G.predecessors(node)),
+                    key=self.sorted_nodes.index,
+                )
+            )
         else:
             return tuple(self.G.predecessors(node))
 
