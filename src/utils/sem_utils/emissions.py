@@ -2,7 +2,7 @@ from copy import deepcopy
 
 from networkx import MultiDiGraph
 from numpy import array, hstack, where
-from sklearn.neighbors import KernelDensity
+from sklearn.neighbors import KernelDensity  #  StatsModels works better
 from src.utils.dag_utils.adjacency_matrix_utils import get_emit_and_trans_adjacency_mats
 
 from ..gp_utils import fit_gp
