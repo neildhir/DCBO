@@ -10,7 +10,7 @@ from src.bayes_opt.intervention_computations import evaluate_acquisition_functio
 from src.utils.gp_utils import fit_gp, sequential_sample_from_SEM_hat
 from src.utils.sem_utils.emissions import fit_sem_emit_fncs
 from src.utils.sem_utils.transitions import fit_sem_trans_fncs
-from src.utils.sequential_intervention_functions import make_sequential_intervention_dictionary
+from src.utils.sequential_intervention_functions import make_sequential_intervention_dict
 
 from .root import Root
 
@@ -188,7 +188,7 @@ class BaseClassDCBO(Root):
 
     def _forward_propagation(self, temporal_index):
 
-        empty_blanket, _ = make_sequential_intervention_dictionary(self.G)
+        empty_blanket = make_sequential_intervention_dict(self.G, self.T)
         res = []
 
         assert temporal_index > 0

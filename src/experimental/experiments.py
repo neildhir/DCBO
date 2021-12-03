@@ -12,7 +12,7 @@ from ..methods.bo import BO
 from ..methods.cbo import CBO
 from ..methods.dcbo import DCBO
 from ..utils.sequential_sampling import sequentially_sample_model
-from ..utils.sequential_intervention_functions import make_sequential_intervention_dictionary
+from ..utils.sequential_intervention_functions import make_sequential_intervention_dict
 from ..utils.utilities import get_monte_carlo_expectation
 
 
@@ -306,7 +306,7 @@ def optimal_sequence_of_interventions(
 
     y_stars = deepcopy(optimal_interventions)
     all_CE = []
-    blank_intervention_blanket = make_sequential_intervention_dictionary(G, T)
+    blank_intervention_blanket = make_sequential_intervention_dict(G, T)
 
     for t in range_T:
 

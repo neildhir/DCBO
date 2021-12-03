@@ -14,7 +14,7 @@ from src.utils.gp_utils import update_sufficient_statistics_hat
 from src.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
-    make_sequential_intervention_dictionary,
+    make_sequential_intervention_dict,
 )
 from src.utils.sequential_sampling import sequentially_sample_model
 from src.utils.utilities import (
@@ -102,11 +102,11 @@ class Root:
             self.blank_val = -1e7  # Negative "infinity" (small number)
 
         # Instantiate blanket that will form final solution
-        self.optimal_blanket = make_sequential_intervention_dictionary(self.G, self.T)
+        self.optimal_blanket = make_sequential_intervention_dict(self.G, self.T)
 
         # Contains all values a assigned as the DCBO walks through the graph; optimal intervention level are assigned at the same temporal level, for which we then use spatial SEMs to predict the other variable levels on that time-slice.
         self.assigned_blanket = deepcopy(self.optimal_blanket)
-        self.empty_intervention_blanket = make_sequential_intervention_dictionary(self.G, self.T)
+        self.empty_intervention_blanket = make_sequential_intervention_dict(self.G, self.T)
 
         # Canonical manipulative variables
         if manipulative_variables is None:
@@ -236,6 +236,7 @@ class Root:
         tuple
             Parents of the node, optionally filtered
         """
+        assert node in self.G.nodes()
         if temporal_index is not None:
             #  This return has to have this complex form because the fitted SEM functions expect multivariate inputs in a specific order (the topological order) of the nodes. Hence the additional sorting.
             return tuple(

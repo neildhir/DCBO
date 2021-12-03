@@ -2,6 +2,7 @@ from copy import deepcopy
 import numpy as np
 from .intervention_assignments import assign_initial_intervention_level, assign_intervention_level
 from .sequential_sampling import sequential_sample_from_true_SEM
+from networkx import MultiDiGraph
 
 
 def create_n_dimensional_intervention_grid(limits: list, size_intervention_grid: int = 100):
@@ -62,7 +63,7 @@ def evaluate_target_function(
     initial_structural_equation_model, structural_equation_model, graph, exploration_set: tuple, all_vars, T: int,
 ):
     # Initialise temporal intervention dictionary
-    intervention_blanket = make_sequential_intervention_dictionary(graph, T)
+    intervention_blanket = make_sequential_intervention_dict(graph, T)
     keys = intervention_blanket.keys()
 
     def compute_target_function(current_target: str, intervention_levels: np.array, assigned_blanket: dict):
@@ -121,21 +122,22 @@ def compute_sequential_target_function(
     return intervention_samples[target_variable][temporal_index]
 
 
-def make_sequential_intervention_dictionary(graph, time_series_length):
+def make_sequential_intervention_dict(G: MultiDiGraph, T: int) -> dict:
     """
-    Makes an intervention dictionary so that we know _where_ (var) and _when_ (time step) to
-    intervene and with what magnitude
+    Makes an intervention dictionary so that we know _where_ (var) and _when_ (time step) to intervene and with what magnitude
 
     Parameters
     ----------
-    graph : [type]
+    G : MultiDiGraph
         A structural causal graph
+    T : int
+        Total time-series length
 
     Returns
     -------
     dict
         Dictionary of (empty) sequential interventions
     """
-    G = "".join(graph.nodes)
-    variables = sorted(set([s for s in G if s.isalpha()]))
-    return {v: time_series_length * [None] for v in variables}
+    nodes = "".join(G.nodes)
+    variables = sorted(set([s for s in nodes if s.isalpha()]))
+    return {v: T * [None] for v in variables}
