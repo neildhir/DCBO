@@ -1,6 +1,6 @@
 # Dynamic Causal Bayesian Optimization
 
-This is a Python implementation of [Dynamic Causal Bayesian Optimization](https://nips.cc/) as presented at NeurIPS 2021.
+This is a Python implementation of [Dynamic Causal Bayesian Optimization](https://proceedings.neurips.cc/paper/2021/file/577bcc914f9e55d5e4e4f82f9f00e7d4-Paper.pdf) as presented at NeurIPS 2021.
 
 ## Abstract
 
