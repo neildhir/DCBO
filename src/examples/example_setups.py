@@ -26,7 +26,7 @@ def setup_stat_scm(T: int = 3):
     # Specify a grid over each exploration and use the grid to find the best intevention value for that ES
     interventional_grids = get_interventional_grids(exploration_sets, intervention_domain, size_intervention_grid=100)
 
-    _, _, true_objective_values, _, _, _ = optimal_sequence_of_interventions(
+    _, _, true_objective_values, _, _, all_causal_effects = optimal_sequence_of_interventions(
         exploration_sets=exploration_sets,
         interventional_grids=interventional_grids,
         initial_structural_equation_model=init_sem,
@@ -37,7 +37,16 @@ def setup_stat_scm(T: int = 3):
         target_variable="Y",
     )
 
-    return init_sem, sem, dag_view, dag, exploration_sets, intervention_domain, true_objective_values
+    return (
+        init_sem,
+        sem,
+        dag_view,
+        dag,
+        exploration_sets,
+        intervention_domain,
+        true_objective_values,
+        all_causal_effects,
+    )
 
 
 def setup_ind_scm(T: int = 3):
