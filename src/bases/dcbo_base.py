@@ -8,8 +8,7 @@ from GPy.models import GPRegression
 from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
 from src.utils.gp_utils import fit_gp, sequential_sample_from_SEM_hat
-from src.utils.sem_utils.emissions import fit_sem_emit_fncs
-from src.utils.sem_utils.transitions import fit_sem_trans_fncs
+from src.utils.sem_utils.sem_estimate import fit_arcs
 from src.utils.sequential_intervention_functions import make_sequential_intervention_dict
 
 from .root import Root
@@ -64,10 +63,10 @@ class BaseClassDCBO(Root):
             "change_points": change_points,
         }
         super().__init__(**root_args)
-        # Fit Gaussian processes to emissions
-        self.sem_emit_fncs = fit_sem_emit_fncs(self.G, self.observational_samples)
-        #  The fit emission function lives in the main class of the method
-        self.sem_trans_fncs = fit_sem_trans_fncs(self.G, self.observational_samples)
+        # Fit Gaussian processes to emission arcs
+        self.sem_emit_fncs = fit_arcs(self.G, self.observational_samples, emissions=True)
+        # Fit Gaussian processes to transition arcs
+        self.sem_trans_fncs = fit_arcs(self.G, self.observational_samples, emissions=False)
 
     def _update_sem_fncs(self, temporal_index: int, temporal_index_data: int = None) -> None:
         """

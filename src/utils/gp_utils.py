@@ -1,12 +1,10 @@
 from copy import deepcopy
-from typing import OrderedDict
+from typing import Callable, OrderedDict, Tuple
+
 import numpy as np
-from typing import Tuple, Callable
-from GPy.core.mapping import Mapping
-from GPy.core.parameterization import priors
 from GPy.kern import RBF
 from GPy.models.gp_regression import GPRegression
-from ..bayes_opt.causal_kernels import CausalRBF
+
 from .sequential_sampling import sequential_sample_from_SEM_hat, sequential_sample_from_true_SEM
 
 
@@ -83,7 +81,7 @@ def update_sufficient_statistics_hat(
         "timesteps": temporal_index + 1,
     }
 
-    def mean_function_internal(x_vals, mean_dict_store):
+    def mean_function_internal(x_vals, mean_dict_store) -> np.ndarray:
         samples = []
         for x in x_vals:
             # Check if it has already been computed
@@ -100,7 +98,7 @@ def update_sufficient_statistics_hat(
                 mean_dict_store[temporal_index][exploration_set][str(x)] = sample[target_variable][temporal_index]
         return np.vstack(samples)
 
-    def mean_function(x_vals):
+    def mean_function(x_vals) -> np.ndarray:
         return mean_function_internal(x_vals, mean_dict_store)
 
     def variance_function_internal(x_vals, var_dict_store):
@@ -119,7 +117,7 @@ def update_sufficient_statistics_hat(
                 var_dict_store[temporal_index][exploration_set][str(x)] = sample[target_variable][temporal_index]
         return np.vstack(out)
 
-    def variance_function(x_vals):
+    def variance_function(x_vals) -> np.ndarray:
         return variance_function_internal(x_vals, var_dict_store)
 
     return mean_function, variance_function
@@ -133,7 +131,7 @@ def update_sufficient_statistics(
     sem: dict,
     dynamic: bool,
     assigned_blanket: dict,
-):
+) -> Tuple[np.ndarray, np.ndarray]:
 
     if dynamic:
         # This relies on the correct blanket being passed from outside this function.
@@ -183,9 +181,7 @@ def update_sufficient_statistics(
     return mean_function, variance_function
 
 
-def fit_gp(
-    x, y, lengthscale=1.0, variance=1.0, noise_var=1.0, ard=False, n_restart=10, seed: int = 0,
-):
+def fit_gp(x, y, lengthscale=1.0, variance=1.0, noise_var=1.0, ard=False, n_restart=10, seed: int = 0,) -> Callable:
     # This seed ensures that if you have the same date the optimization of the ML leads to the same hyper-parameters
     np.random.seed(seed)
     kernel = RBF(x.shape[1], ARD=ard, lengthscale=lengthscale, variance=variance)

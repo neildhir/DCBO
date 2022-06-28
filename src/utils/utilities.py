@@ -1,6 +1,6 @@
 from copy import deepcopy
 from itertools import chain, combinations
-from typing import Tuple
+from typing import Iterable, OrderedDict, Tuple
 from networkx.classes.multidigraph import MultiDiGraph
 import numpy as np
 from emukit.core import ContinuousParameter, ParameterSpace
@@ -338,11 +338,34 @@ def check_blanket(blanket, base_target_variable, temporal_index, manipulative_va
     assert any(x is not None for x in [blanket[var][temporal_index] for var in manipulative_variables]), blanket
 
 
-def select_sample(sample, input_variables, outside_time):
+def select_sample(sample: OrderedDict, input_variables: Iterable, outside_time: int) -> np.ndarray:
+    """Select the part of the sample which will be used as the input for the GP regression.
+
+    Parameters
+    ----------
+    sample : OrderedDict
+        The sample as it is being created
+    input_variables : Iterable
+        The input variables fort he GP regression
+    outside_time : int
+        The current time indexed being worked on
+
+    Returns
+    -------
+    np.ndarray
+        The input formatted as an ndarray of shape N x D
+    """
+
     if isinstance(input_variables, str):
         return sample[input_variables][outside_time].reshape(-1, 1)
+    elif len(input_variables) == 3 and isinstance(input_variables[1], int):
+        # Special case when the input looks like (pa_V,ID,V)
+        pa_V = input_variables[0]
+        var, time = pa_V.split("_")[0], int(pa_V.split("_")[1])
+        assert time == outside_time, (sample, input_variables, time, outside_time)
+        return sample[var][time].reshape(-1, 1)
     else:
-        #  Takes either a tuple() or a list()
+        # Takes either a tuple() or a list()
         samp = []
         for node in input_variables:
             var, time = node.split("_")[0], int(node.split("_")[1])

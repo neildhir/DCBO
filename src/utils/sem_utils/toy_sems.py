@@ -2,6 +2,32 @@ from collections import OrderedDict
 import numpy as np
 
 
+class PISHCAT_SEM:
+    @staticmethod
+    def static():
+
+        P = lambda noise, t, sample: noise
+        I = lambda noise, t, sample: noise
+        S = lambda noise, t, sample: sample["I"][t] + noise
+        H = lambda noise, t, sample: sample["P"][t] + noise
+        C = lambda noise, t, sample: sample["H"][t] + noise
+        A = lambda noise, t, sample: sample["I"][t] + sample["P"][t] + noise
+        T = lambda noise, t, sample: sample["C"][t] + sample["A"][t] + noise
+        return OrderedDict([("P", P), ("I", I), ("S", S), ("H", H), ("C", C), ("A", A), ("T", T)])
+
+    @staticmethod
+    def dynamic():
+
+        P = lambda noise, t, sample: sample["P"][t - 1] + noise
+        I = lambda noise, t, sample: sample["I"][t - 1] + noise
+        S = lambda noise, t, sample: sample["S"][t - 1] + sample["I"][t] + noise
+        H = lambda noise, t, sample: sample["S"][t - 1] + sample["P"][t] + noise
+        C = lambda noise, t, sample: sample["H"][t] + noise
+        A = lambda noise, t, sample: sample["I"][t] + sample["P"][t] + noise
+        T = lambda noise, t, sample: sample["C"][t] + sample["A"][t] + noise
+        return OrderedDict([("P", P), ("I", I), ("S", S), ("H", H), ("C", C), ("A", A), ("T", T)])
+
+
 class StationaryDependentSEM:
     @staticmethod
     def static():
@@ -21,6 +47,71 @@ class StationaryDependentSEM:
             lambda noise, t, sample: np.cos(sample["Z"][t])
             - np.exp(-sample["Z"][t] / 20.0)
             + sample["Y"][t - 1]
+            + noise
+        )
+        return OrderedDict([("X", X), ("Z", Z), ("Y", Y)])
+
+
+class LinearMultipleChildrenSEM:
+    """
+    Test DAG for nodes within a slice that have more than one child _within_ the slice.
+
+    Returns
+    -------
+        None
+    """
+
+    @staticmethod
+    def static() -> OrderedDict:
+
+        X = lambda noise, t, sample: 1 + noise
+        Z = lambda noise, t, sample: 2 * sample["X"][t] + noise
+        Y = lambda noise, t, sample: 2 * sample["Z"][t] - sample["X"][t] + noise
+        return OrderedDict([("X", X), ("Z", Z), ("Y", Y)])
+
+    @staticmethod
+    def dynamic() -> OrderedDict:
+
+        # We get temporal innovation by introducing transfer functions between temporal indices
+        X = lambda noise, t, sample: sample["X"][t - 1] + 1 + noise
+        Z = lambda noise, t, sample: 2 * sample["X"][t] + sample["Z"][t - 1] + noise
+        Y = lambda noise, t, sample: 2 * sample["Z"][t] + sample["Y"][t - 1] - sample["X"][t] + noise
+        return OrderedDict([("X", X), ("Z", Z), ("Y", Y)])
+
+
+class StationaryDependentMultipleChildrenSEM:
+    """
+    Test DAG for nodes within a slice that have more than one child _within_ the slice.
+
+    Returns
+    -------
+        None
+    """
+
+    @staticmethod
+    def static() -> OrderedDict:
+
+        X = lambda noise, t, sample: noise
+        Z = lambda noise, t, sample: np.exp(-sample["X"][t]) + noise
+        Y = (
+            lambda noise, t, sample: np.cos(sample["Z"][t])
+            - np.exp(-sample["Z"][t] / 20.0)
+            - np.sin(sample["X"][t])
+            + noise
+        )
+        return OrderedDict([("X", X), ("Z", Z), ("Y", Y)])
+
+    @staticmethod
+    def dynamic() -> OrderedDict:
+
+        # We get temporal innovation by introducing transfer functions between temporal indices
+        X = lambda noise, t, sample: sample["X"][t - 1] + noise
+        Z = lambda noise, t, sample: np.exp(-sample["X"][t]) + sample["Z"][t - 1] + noise
+        Y = (
+            lambda noise, t, sample: np.cos(sample["Z"][t])
+            - np.exp(-sample["Z"][t] / 20.0)
+            + sample["Y"][t - 1]
+            - np.sin(sample["X"][t])
             + noise
         )
         return OrderedDict([("X", X), ("Z", Z), ("Y", Y)])

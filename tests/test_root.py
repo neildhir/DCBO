@@ -1,6 +1,6 @@
 import unittest
-from numpy import arange, linspace
 
+from numpy import arange, linspace
 from numpy.random import seed
 from src.bases.root import Root
 from src.examples.example_setups import setup_stat_scm
@@ -22,11 +22,13 @@ class TestRoot(unittest.TestCase):
         (
             self.init_sem,
             self.sem,
-            _,
+            _,  #  view of the DAG
             self.G,
             self.exploration_sets,
             self.intervention_domain,
             self.true_objective_values,
+            _,  # optimal interventions
+            _,  # all causal effects
         ) = setup_stat_scm(T=self.T)
         #  Sample observational data using SEM
         D_O = sequentially_sample_model(
@@ -114,7 +116,7 @@ class TestRoot(unittest.TestCase):
         nodes = list(self.root.G.nodes())
         self.assertEqual(v_n, 3)
         for t in range(self.G.T):
-            self.assertEquak(len([v for v in nodes if v.split("_")[1] == str(t)]), v_n)
+            self.assertEqual(len([v for v in nodes if v.split("_")[1] == str(t)]), v_n)
 
 
 if __name__ == "__main__":

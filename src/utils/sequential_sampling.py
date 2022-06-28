@@ -12,6 +12,7 @@ def sequential_sample_from_true_SEM(
     epsilon=None,
     seed=None,
 ) -> OrderedDict:
+
     if seed is not None:
         np.random.seed(seed)
     # A specific noise-model has not been provided so we use standard Gaussian noise
@@ -112,25 +113,26 @@ def sequential_sample_from_SEM_hat(
                     sample[var][t] = initial_values[var]
                 # If neither interventions nor initial values are provided; sample the model
                 else:
-                    node = var + "_" + str(t)
-                    if node_parents(node, t):
-                        sample[var][t] = function(t, node_parents(node, t), sample)
+                    V = var + "_" + str(t)
+                    if node_parents(V, t):
+                        sample[var][t] = function(t, None, node_parents(V, t), sample)
                     else:
                         # Sample source node marginal
-                        sample[var][t] = function(t, (None, node))
+                        sample[var][t] = function(t, (None, V))
         else:
             assert dynamic_sem is not None
             for var, function in dynamic_sem.items():
-                node = var + "_" + str(t)  # E.g. X_1
+                V = var + "_" + str(t)  # E.g. X_1
                 if interventions and interventions[var][t]:
                     sample[var][t] = interventions[var][t]
-                elif node_parents(node):
-                    # function args: time index, parents which are transfer vars, parents which are emission vars and the sample
-                    sample[var][t] = function(t, node_parents(node, t - 1), node_parents(node, t), sample)
-                else:
+                # TODO: pass the graph to not have to deal with this.
+                elif not node_parents(V, t - 1) and not node_parents(V, t):
                     # Sample source node marginal
-                    sample[var][t] = function(t, (None, node))
-
+                    sample[var][t] = function(t, (None, V))
+                # TODO: pass the graph to not have to deal with this.
+                else:
+                    # input args: time index, parents which are transfer vars, parents which are emission vars and the sample
+                    sample[var][t] = function(t, node_parents(V, t - 1), node_parents(V, t), sample)
     return sample
 
 

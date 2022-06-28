@@ -1,10 +1,10 @@
 from copy import deepcopy
 from random import choice
 from typing import Callable, Tuple, Union
-from networkx.algorithms.dag import topological_sort
 
 import numpy as np
 from matplotlib import pyplot as plt
+from networkx.algorithms.dag import topological_sort
 from networkx.classes.multidigraph import MultiDiGraph
 from numpy.core.multiarray import ndarray
 from numpy.core.numeric import nan, squeeze
@@ -24,8 +24,8 @@ from src.utils.utilities import (
     check_reshape_add_data,
     convert_to_dict_of_temporal_lists,
     create_intervention_exploration_domain,
-    initialise_interventional_objects,
     initialise_global_outcome_dict_new,
+    initialise_interventional_objects,
     initialise_optimal_intervention_level_list,
     make_column_shape_2D,
 )
@@ -220,33 +220,95 @@ class Root:
         if self.estimate_sem:
             self.assigned_blanket_hat = deepcopy(self.optimal_blanket)
 
-    def node_parents(self, node: str, temporal_index: int = None) -> tuple:
+    def _filter_on_time_index(self, node: str, temporal_index: int) -> tuple:
+        """Function that filters the parents of a node according to the temporal index.
+
+        Parameters
+        ----------
+        node : str
+            The child node of interest (target node)
+        temporal_index : int
+            The index of interest
+
+        Returns
+        -------
+        tuple
+            A tuple which only contains nodes with index temporal_index
+        """
+        return tuple(
+            sorted(
+                filter(lambda x: x.endswith(str(temporal_index)), self.G.predecessors(node)), key=self.sorted_nodes.get,
+            )
+        )
+
+    def _get_parents(self, pa_V: tuple, V: str, arc_fnc_keys: dict, t: int) -> tuple:
+        """
+        Function to extract the parents of a node, both transition and emission nodes.
+
+        Parameters
+        ----------
+        pa_V : tuple
+            Parents of node V
+        V : str
+            Node
+        arc_fnc_keys : dict
+            Function keys for either the emission or transitions fncs
+        t : int
+            Time index under investigation
+
+        Returns
+        -------
+        tuple
+            Returns the parents in the correct form
+
+        Raises
+        ------
+        ValueError
+            If we have introduced a topology that has not been convered.
+        """
+        if not pa_V:
+            # Will be a root node or an instrument variable if using those
+            return pa_V
+        else:
+            # Check if the node parent key is in the dict keys
+            if pa_V in arc_fnc_keys:
+                return pa_V
+            elif tuple(reversed(pa_V)) in arc_fnc_keys:
+                #  This is a bit of hack since the tuple order matters
+                return tuple(reversed(pa_V))
+            else:
+                # Find the matching unique key
+                master_key = (pa_V[0], None, V)
+                for key in arc_fnc_keys:
+                    if master_key[0] == key[0] and master_key[-1] == key[-1]:
+                        return key
+                # If it has got this far something has gone wrong
+                raise ValueError(pa_V, t, V)
+
+    def node_parents(self, V: str, t: int = None) -> tuple:
         """
         Returns the parents of this node with optional filtering on the time-index.
 
         Parameters
         ----------
-        node : str
-            The node of interest
-        temporal_index : int, optional
+        V : str
+            The node of interest (the estimand)
+        t: int, optional
             Select from which time-slice we want nodes only, by default None
 
         Returns
         -------
         tuple
-            Parents of the node, optionally filtered
+            Parents of the node (the indepdendent vars w.r.t. the estimand), optionally filtered
         """
-        assert node in self.G.nodes()
-        if temporal_index is not None:
-            #  This return has to have this complex form because the fitted SEM functions expect multivariate inputs in a specific order (the topological order) of the nodes. Hence the additional sorting.
-            return tuple(
-                sorted(
-                    filter(lambda x: x.endswith(str(temporal_index)), self.G.predecessors(node)),
-                    key=self.sorted_nodes.get,
-                )
-            )
+        # Parents of the node either in this time-slice or the past one
+        pa_V = self._filter_on_time_index(V, t)
+        if int(V.split("_")[1]) - 1 == t:
+            # Transition arcs
+            return self._get_parents(pa_V, V, self.sem_trans_fncs[t + 1].keys(), t)
         else:
-            return tuple(self.G.predecessors(node))
+            #  Emission arcs
+            return self._get_parents(pa_V, V, self.sem_emit_fncs[t].keys(), t)
 
     def _get_sem_emit_obs(
         self, t: int, pa: tuple, t_index_data: int = None
@@ -295,7 +357,7 @@ class Root:
 
         return xx, yy
 
-    def _plot_surrogate_model(self, temporal_index):
+    def _plot_surrogate_model(self, temporal_index) -> None:
         # Plot model
         for es in self.exploration_sets:
             if len(es) == 1:
@@ -303,14 +365,14 @@ class Root:
 
                 if self.bo_model[temporal_index][es] is not None:
                     mean, var = self.bo_model[temporal_index][es].predict(self.interventional_grids[es])
-                    print("\n\t\t[1] The BO model exists for ES: {} at t == {}.\n".format(es, temporal_index))
+                    print("\n\t\t[1] The BO model EXISTS for ES: {} at t == {}.\n".format(es, temporal_index))
                     print("Assigned blanket", self.assigned_blanket)
                 else:
                     mean = self.mean_function[temporal_index][es](self.interventional_grids[es])
                     var = self.variance_function[temporal_index][es](self.interventional_grids[es]) + np.ones_like(
                         self.variance_function[temporal_index][es](self.interventional_grids[es])
                     )
-                    print("\n\t\t[0] The BO model does not exists for ES: {} at t == {}.\n".format(es, temporal_index))
+                    print("\n\t\t[0] The BO model does NOT EXISTS for ES: {} at t == {}.\n".format(es, temporal_index))
                     print("Assigned blanket", self.assigned_blanket)
 
                 true = make_column_shape_2D(self.ground_truth[temporal_index][es])
@@ -319,14 +381,29 @@ class Root:
                     self.interventional_data_x[temporal_index][es] is not None
                     and self.interventional_data_y[temporal_index][es] is not None
                 ):
-                    plt.scatter(
-                        self.interventional_data_x[temporal_index][es], self.interventional_data_y[temporal_index][es],
+                    #  Plots the collected interventional data up until this point
+                    x, y = (
+                        self.interventional_data_x[temporal_index][es],
+                        self.interventional_data_y[temporal_index][es],
+                    )
+                    plt.scatter(x, y, alpha=1.0, color="blue")
+                    xx, yy = x[-1].item(), y[-1].item()
+                    plt.annotate(
+                        "x: {}\ny: {}".format(round(xx, 3), round(yy, 3)),
+                        xy=(xx, yy),
+                        xycoords="data",
+                        xytext=(0, 30),
+                        textcoords="offset points",
+                        ha="center",
+                        bbox=dict(boxstyle="round, pad=0.5", fc="white", alpha=1.0),
                     )
 
                 plt.fill_between(inputs[:, 0], (mean - var)[:, 0], (mean + var)[:, 0], alpha=0.2)
                 plt.plot(
-                    inputs, mean, "b", label="$do{}$ at $t={}$".format(es, temporal_index),
+                    inputs, mean, "b", label="$do({})$ at $t={}$".format(es[0], temporal_index),
                 )
+                plt.ylabel(self.base_target_variable.lower())  #  Target values
+                plt.xlabel(es[0].lower())  #  Intervention values
                 plt.plot(inputs, true, "r", label="True at $t={}$".format(temporal_index))
                 plt.legend()
                 plt.show()
@@ -358,7 +435,7 @@ class Root:
             # The cost of observation is the same as the previous trial.
             self.per_trial_cost[temporal_index].append(self.per_trial_cost[temporal_index][-1])
 
-    def _check_new_point(self, best_es, temporal_index):
+    def _check_new_point(self, best_es, temporal_index) -> bool:
         assert best_es is not None, (best_es, self.y_acquired)
         assert best_es in self.exploration_sets
 
@@ -370,7 +447,7 @@ class Root:
             self.corresponding_x,
         )
 
-    def _check_optimization_results(self, temporal_index):
+    def _check_optimization_results(self, temporal_index) -> None:
         # Check everything went well with the trials
         assert len(self.optimal_outcome_values_during_trials[temporal_index]) == self.number_of_trials, (
             len(self.optimal_outcome_values_during_trials[temporal_index]),
@@ -390,14 +467,14 @@ class Root:
             temporal_index,
         )
 
-    def _safe_optimization(self, temporal_index, exploration_set, bound_var=1e-02, bound_len=20.0):
+    def _safe_optimization(self, temporal_index, exploration_set, bound_var=1e-02, bound_len=20.0) -> None:
         if self.bo_model[temporal_index][exploration_set].model.kern.variance[0] < bound_var:
             self.bo_model[temporal_index][exploration_set].model.kern.variance[0] = 1.0
 
         if self.bo_model[temporal_index][exploration_set].model.kern.lengthscale[0] > bound_len:
             self.bo_model[temporal_index][exploration_set].model.kern.lengthscale[0] = 1.0
 
-    def _get_updated_interventional_data(self, new_interventional_data_x, y_new, best_es, temporal_index):
+    def _get_updated_interventional_data(self, new_interventional_data_x, y_new, best_es, temporal_index) -> None:
         data_x, data_y = check_reshape_add_data(
             self.interventional_data_x,
             self.interventional_data_y,
@@ -409,7 +486,7 @@ class Root:
         self.interventional_data_x[temporal_index][best_es] = data_x
         self.interventional_data_y[temporal_index][best_es] = data_y
 
-    def _plot_conditional_distributions(self, temporal_index, it):
+    def _plot_conditional_distributions(self, temporal_index, it) -> None:
         print("Time:", temporal_index)
         print("Iter:", it)
         print("\n### Emissions ###\n")
@@ -476,11 +553,12 @@ class Root:
             else:
                 raise NotImplementedError("This function has to be updated to reflect recent changes in 'hat' version.")
 
-    def _update_observational_data(self, temporal_index):
+    def _update_observational_data(self, temporal_index) -> None:
         if temporal_index > 0:
             if self.online:
                 if isinstance(self.n_obs_t, list):
-                    local_n_t = self.n_obs_t[temporal_index]
+                    # XXX: Sam caught a good exception here for indexing
+                    local_n_t = self.n_obs_t[temporal_index - 1]
                 else:
                     local_n_t = self.n_obs_t
                 assert local_n_t is not None
@@ -588,12 +666,12 @@ class Root:
         # Check optimization results for the current temporal index before moving on
         self._check_optimization_results(t)
 
-    def _per_trial_computations(self, t: int, it: int, target: str, assigned_blanket: dict, method: str = None):
+    def _per_trial_computations(self, t: int, it: int, target: str, assigned_blanket: dict, method: str = None) -> None:
 
         if self.debug_mode:
-            print("\n\n>>>")
-            print("Iteration:", it)
-            print("<<<\n\n")
+            print("\n>>>")
+            print("Time (t): {}\nIteration (i): {}".format(t, it))
+            print("<<<\n")
             self._plot_surrogate_model(t)
 
         # Presently find the optimal value of Y_t
@@ -605,13 +683,14 @@ class Root:
         # Compute acquisition function given the updated BO models for the interventional data. Notice that we use current_global and the costs to compute the acquisition functions.
         self._evaluate_acquisition_functions(t, current_best_global_target, it)
 
-        # Best exploration set based on acquired target-values [best_es == set of all manipulative varibles for BO and ABO]
+        # <<Best exploration set>> based on acquired target-values [best_es == set of all manipulative varibles for BO and ABO] -- obs that this is returning the maximum of the acquisition function (between 0 and 1), not the main objective (outcome) value
         best_es = eval("max")(self.y_acquired, key=self.y_acquired.get)
 
         # Get the correspoding values for this intervention set
         if method == "ABO":
             # Discard the time dimension
             self.corresponding_x[best_es] = self.corresponding_x[best_es][:, :-1]
+        # All other methods (BO/CBO/DCBO)
         new_interventional_data_x = self.corresponding_x[best_es]
         self._check_new_point(best_es, t)
 
@@ -623,9 +702,11 @@ class Root:
         )
 
         if self.debug_mode:
-            print("Selected set:", best_es)
-            print("Intervention value:", new_interventional_data_x)
-            print("Outcome:", y_new)
+            print("\n--------------------------------------------------")
+            print("Selected intervention set:", best_es)
+            print("Intervention value:", new_interventional_data_x.item())
+            print("Outcome value:", y_new)
+            print("--------------------------------------------------\n")
 
         # Update interventional data
         self._get_updated_interventional_data(new_interventional_data_x, y_new, best_es, t)
@@ -652,8 +733,7 @@ class Root:
         self._update_bo_model(t, best_es)
 
         if self.debug_mode:
-            print(">>> Results of optimization")
+            print("\n>>> Results of optimization")
             self._plot_surrogate_model(t)
-            print(
-                "### Optimized model: ###", best_es, self.bo_model[t][best_es].model,
-            )
+            print(">>> Optimized model: {}\n".format(best_es))
+            print(self.bo_model[t][best_es].model)

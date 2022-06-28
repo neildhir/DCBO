@@ -9,7 +9,7 @@ from GPy.models import GPRegression
 from src.bases.root import Root
 from src.bayes_opt.causal_kernels import CausalRBF
 from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.sem_utils.emissions import fit_sem_emit_fncs
+from src.utils.sem_utils.sem_estimate import fit_arcs
 from src.utils.utilities import (
     convert_to_dict_of_temporal_lists,
     standard_mean_function,
@@ -83,7 +83,7 @@ class CBO(Root):
         self.sample_anchor_points = sample_anchor_points
         self.seed_anchor_points = seed_anchor_points
         # Fit Gaussian processes to emissions
-        self.sem_emit_fncs = fit_sem_emit_fncs(self.G, self.observational_samples)
+        self.sem_emit_fncs = fit_arcs(self.G, self.observational_samples, emissions=True)
         # Convert observational samples to dict of temporal lists. We do this because at each time-index we may have a different number of samples. Because of this, samples need to be stored one lists per time-step.
         self.observational_samples = convert_to_dict_of_temporal_lists(self.observational_samples)
 
@@ -150,6 +150,7 @@ class CBO(Root):
 
     def _evaluate_acquisition_functions(self, temporal_index, current_best_global_target, it):
 
+        # Loop over all given exploration sets
         for es in self.exploration_sets:
             if (
                 self.interventional_data_x[temporal_index][es] is not None
