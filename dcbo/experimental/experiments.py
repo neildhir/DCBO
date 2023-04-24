@@ -7,13 +7,13 @@ from networkx.classes.multidigraph import MultiDiGraph
 from pandas import DataFrame, read_csv
 from tqdm import trange
 
-from src.methods.abo import ABO
-from src.methods.bo import BO
-from src.methods.cbo import CBO
-from src.methods.dcbo import DCBO
-from src.utils.sequential_sampling import sequentially_sample_model
-from src.utils.sequential_intervention_functions import make_sequential_intervention_dict
-from src.utils.utilities import get_monte_carlo_expectation
+from dcbo.methods.abo import ABO
+from dcbo.methods.bo import BO
+from dcbo.methods.cbo import CBO
+from dcbo.methods.dcbo import DCBO
+from dcbo.utils.sequential_sampling import sequentially_sample_model
+from dcbo.utils.sequential_intervention_functions import make_sequential_intervention_dict
+from dcbo.utils.utilities import get_monte_carlo_expectation
 
 
 def run_methods_replicates(

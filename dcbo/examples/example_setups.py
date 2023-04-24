@@ -1,8 +1,8 @@
 import pygraphviz
 from networkx.drawing import nx_agraph
-from src.experimental.experiments import optimal_sequence_of_interventions
-from src.utils.dag_utils.graph_functions import make_graphical_model
-from src.utils.sem_utils.toy_sems import (
+from dcbo.experimental.experiments import optimal_sequence_of_interventions
+from dcbo.utils.dag_utils.graph_functions import make_graphical_model
+from dcbo.utils.sem_utils.toy_sems import (
     PISHCAT_SEM,
     LinearMultipleChildrenSEM,
     NonStationaryDependentSEM,
@@ -10,8 +10,8 @@ from src.utils.sem_utils.toy_sems import (
     StationaryDependentSEM,
     StationaryIndependentSEM,
 )
-from src.utils.sequential_intervention_functions import get_interventional_grids
-from src.utils.utilities import powerset
+from dcbo.utils.sequential_intervention_functions import get_interventional_grids
+from dcbo.utils.utilities import powerset
 
 
 def setup_PISHCAT(T: int = 3):

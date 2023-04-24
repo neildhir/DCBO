@@ -22,16 +22,8 @@ This paper studies the problem of performing a sequence of optimal interventions
 
 ## Installation
 
-Use `python > 3.7` and
-
 ```[markdown]
-pip install -r requirements.txt
-```
-
-or
-
-```[markdown]
-pip install .
+pip install -e .
 ```
 
 ## Tutorials

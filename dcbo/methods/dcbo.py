@@ -1,6 +1,6 @@
 from typing import Callable
-from src.bases.dcbo_base import BaseClassDCBO
-from src.utils.utilities import convert_to_dict_of_temporal_lists
+from dcbo.bases.dcbo_base import BaseClassDCBO
+from dcbo.utils.utilities import convert_to_dict_of_temporal_lists
 from tqdm import trange
 
 

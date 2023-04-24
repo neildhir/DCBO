@@ -6,11 +6,11 @@ from GPy.core import Mapping
 from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
-from src.bases.root import Root
-from src.bayes_opt.causal_kernels import CausalRBF
-from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.sem_utils.sem_estimate import fit_arcs
-from src.utils.utilities import (
+from dcbo.bases.root import Root
+from dcbo.bayes_opt.causal_kernels import CausalRBF
+from dcbo.bayes_opt.intervention_computations import evaluate_acquisition_function
+from dcbo.utils.sem_utils.sem_estimate import fit_arcs
+from dcbo.utils.utilities import (
     convert_to_dict_of_temporal_lists,
     standard_mean_function,
     zero_variance_adjustment,

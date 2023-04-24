@@ -9,15 +9,15 @@ from networkx.classes.multidigraph import MultiDiGraph
 from numpy.core.multiarray import ndarray
 from numpy.core.numeric import nan, squeeze
 from sklearn.neighbors import KernelDensity
-from src.bayes_opt.cost_functions import define_costs, total_intervention_cost
-from src.utils.gp_utils import update_sufficient_statistics_hat
-from src.utils.sequential_intervention_functions import (
+from dcbo.bayes_opt.cost_functions import define_costs, total_intervention_cost
+from dcbo.utils.gp_utils import update_sufficient_statistics_hat
+from dcbo.utils.sequential_intervention_functions import (
     evaluate_target_function,
     get_interventional_grids,
     make_sequential_intervention_dict,
 )
-from src.utils.sequential_sampling import sequentially_sample_model
-from src.utils.utilities import (
+from dcbo.utils.sequential_sampling import sequentially_sample_model
+from dcbo.utils.utilities import (
     assign_blanket,
     assign_blanket_hat,
     check_blanket,

@@ -2,12 +2,12 @@ import unittest
 
 from numpy import arange, linspace
 from numpy.random import seed
-from src.bases.root import Root
-from src.examples.example_setups import setup_stat_scm
-from src.utils.sem_utils.toy_sems import StationaryDependentSEM as StatSEM
-from src.utils.sequential_intervention_functions import get_interventional_grids
-from src.utils.sequential_sampling import sequentially_sample_model
-from src.utils.utilities import convert_to_dict_of_temporal_lists, powerset
+from dcbo.bases.root import Root
+from dcbo.examples.example_setups import setup_stat_scm
+from dcbo.utils.sem_utils.toy_sems import StationaryDependentSEM as StatSEM
+from dcbo.utils.sequential_intervention_functions import get_interventional_grids
+from dcbo.utils.sequential_sampling import sequentially_sample_model
+from dcbo.utils.utilities import convert_to_dict_of_temporal_lists, powerset
 
 seed(seed=0)
 

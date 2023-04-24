@@ -3,9 +3,9 @@ from GPy.core.parameterization import priors
 from GPy.kern.src.rbf import RBF
 from GPy.models import GPRegression
 from numpy import random
-from src.bases.root import Root
-from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.utilities import (
+from dcbo.bases.root import Root
+from dcbo.bayes_opt.intervention_computations import evaluate_acquisition_function
+from dcbo.utils.utilities import (
     convert_to_dict_of_temporal_lists,
     standard_mean_function,
     zero_variance_adjustment,

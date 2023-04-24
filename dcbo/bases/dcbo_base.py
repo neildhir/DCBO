@@ -5,11 +5,11 @@ from emukit.model_wrappers.gpy_model_wrappers import GPyModelWrapper
 from GPy.core import Mapping
 from GPy.core.parameterization import priors
 from GPy.models import GPRegression
-from src.bayes_opt.causal_kernels import CausalRBF
-from src.bayes_opt.intervention_computations import evaluate_acquisition_function
-from src.utils.gp_utils import fit_gp, sequential_sample_from_SEM_hat
-from src.utils.sem_utils.sem_estimate import fit_arcs
-from src.utils.sequential_intervention_functions import make_sequential_intervention_dict
+from dcbo.bayes_opt.causal_kernels import CausalRBF
+from dcbo.bayes_opt.intervention_computations import evaluate_acquisition_function
+from dcbo.utils.gp_utils import fit_gp, sequential_sample_from_SEM_hat
+from dcbo.utils.sem_utils.sem_estimate import fit_arcs
+from dcbo.utils.sequential_intervention_functions import make_sequential_intervention_dict
 
 from .root import Root
 

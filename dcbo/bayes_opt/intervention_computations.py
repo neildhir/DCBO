@@ -3,10 +3,10 @@ from typing import Tuple
 import numpy as np
 from emukit.core.parameter_space import ParameterSpace
 from numpy import argmax, argmin, ndarray
-from src.bayes_opt.causal_acquisition_functions import CausalExpectedImprovement, ManualCausalExpectedImprovement
-from src.bayes_opt.cost_functions import COST
-from src.utils.sequential_intervention_functions import create_n_dimensional_intervention_grid
-from src.utils.utilities import make_column_shape_2D
+from dcbo.bayes_opt.causal_acquisition_functions import CausalExpectedImprovement, ManualCausalExpectedImprovement
+from dcbo.bayes_opt.cost_functions import COST
+from dcbo.utils.sequential_intervention_functions import create_n_dimensional_intervention_grid
+from dcbo.utils.utilities import make_column_shape_2D
 
 
 def numerical_optimization(acquisition, inputs: ndarray, task: str, exploration_set,) -> ndarray:
